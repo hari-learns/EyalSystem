@@ -13,4 +13,5 @@ export type CheckoutFormValues = {
   phone10: string;
   address: string;
   note: string;
+  website: string;
 };

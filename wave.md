@@ -286,7 +286,7 @@ Notes:
 
 ## 8. Wave 4 - DB-Backed Public Storefront
 
-Status: **Done**.
+Status: **Done** in commit `ef5e1b0`.
 
 Goal: public storefront reads live store/product data from Supabase.
 
@@ -319,7 +319,7 @@ Notes:
 
 ## 9. Wave 5 - Checkout And Order Creation
 
-Status: done.
+Status: **Done** in commit `efaeeb2`.
 
 Goal: customer can place an order that is stored correctly.
 
@@ -369,7 +369,7 @@ Implementation notes:
 
 ## 10. Wave 6 - Email Order Delivery
 
-Status: implemented, pending live Resend credential verification.
+Status: **Implemented** in commit `897a46d`; pending live Resend credential verification.
 
 Goal: merchant receives order emails.
 
@@ -418,6 +418,8 @@ Implementation notes:
 
 ## 11. Wave 7 - Merchant Admin Auth And Product Operations
 
+Status: **Implemented** in commit `a40f9b9`; pending manual Supabase Auth merchant-user verification.
+
 Goal: merchant can update operational product fields.
 
 Build:
@@ -444,7 +446,34 @@ Commit gate:
 - Authorization tests or manual RLS verification completed.
 - No exposed admin mutation route without auth.
 
+Implementation notes:
+
+- Added `/admin` merchant portal.
+- Added Supabase Auth password login from the browser using the publishable key only.
+- Added protected server APIs:
+  - `/api/admin/me`
+  - `/api/admin/products`
+- Product admin supports:
+  - description edits
+  - product availability updates
+  - variant price updates
+  - variant availability updates
+- Product image editing and deletion are intentionally not exposed.
+- Server route handlers re-check merchant/store access before using the admin Supabase client.
+- Unauthenticated admin API access was smoke-tested and returns `401`.
+
+Manual verification needed:
+
+- Create a Supabase Auth user for the Eyal merchant.
+- Insert a matching `merchant_users` row for `eyal-chekku-oils`.
+- Login at `/admin`.
+- Change one product description and verify `/s/eyal-chekku-oils` reflects it.
+- Change one price and verify storefront reflects it.
+- Mark one variant unavailable and verify checkout rejects it, then restore it.
+
 ## 12. Wave 8 - Merchant Order History And Search
+
+Status: **Implemented** in commit `a40f9b9`; pending manual merchant-user verification with real orders.
 
 Goal: merchant can use the system operationally after orders arrive.
 
@@ -479,7 +508,31 @@ Commit gate:
 - Order list works on mobile.
 - Search does not expose other stores' orders.
 
+Implementation notes:
+
+- Added protected `/api/admin/orders`.
+- Merchant order list supports:
+  - status filter
+  - customer name search
+  - 10 digit phone search with automatic `+91` normalization
+  - `+91` phone search with spaces ignored
+  - order item detail display
+  - status updates to `new`, `contacted`, `completed`, and `cancelled`
+- Status timestamp fields are updated for contacted/completed/cancelled transitions.
+- Store access is checked server-side before orders are read or changed.
+
+Manual verification needed:
+
+- Login as Eyal merchant.
+- Place a real test order.
+- Search by customer name.
+- Search by 10 digit phone without typing `+91`.
+- Change status to contacted, completed, and cancelled.
+- Confirm merchant cannot see another store after a second store exists.
+
 ## 13. Wave 9 - Platform Owner Admin And Commission
+
+Status: **Implemented** in commit `a40f9b9`; pending owner env and manual report verification.
 
 Goal: platform owner can track business value and commission.
 
@@ -510,7 +563,30 @@ Commit gate:
 - Report totals match direct DB query.
 - Owner routes not accessible to merchants.
 
+Implementation notes:
+
+- Added owner-only `/api/owner/report`.
+- `/admin` shows Owner tab only when the authenticated email is listed in `PLATFORM_OWNER_EMAILS`.
+- Monthly report includes:
+  - submitted orders
+  - completed orders
+  - cancelled orders
+  - completed order value
+  - commission due
+- Commission calculation uses current active `commission_rules`.
+- Owner route returns `403` for non-owner authenticated users.
+
+Manual verification needed:
+
+- Set `PLATFORM_OWNER_EMAILS` in local/Vercel env.
+- Login as an owner email.
+- Open Owner tab in `/admin`.
+- Compare a monthly report against the SQL query in `docs/order-export-notes.md`.
+- Verify a merchant email not listed in `PLATFORM_OWNER_EMAILS` cannot load `/api/owner/report`.
+
 ## 14. Wave 10 - QR And Merchant Onboarding Workflow
+
+Status: **Partially implemented** in commit `a40f9b9`.
 
 Goal: new stores can be created repeatably.
 
@@ -538,7 +614,28 @@ Commit gate:
 - Second demo store proves system is reusable.
 - No duplicated storefront code per merchant.
 
+Implementation notes:
+
+- Added public QR SVG endpoint:
+  - `/api/stores/:storeSlug/qr`
+- Added QR display in owner admin tab.
+- Added onboarding template:
+  - `docs/merchant-onboarding-template.md`
+- QR endpoint was smoke-tested and returns SVG.
+- The storefront remains data-driven by store slug; no code duplication is needed for another merchant storefront.
+
+Manual verification needed:
+
+- Deploy to Vercel and set `NEXT_PUBLIC_SITE_URL`.
+- Open `/api/stores/eyal-chekku-oils/qr`.
+- Scan QR from a phone and confirm it opens the deployed `/s/eyal-chekku-oils`.
+- Add a second demo store in Supabase.
+- Confirm second store works without code changes.
+- Confirm second store merchant sees only that store.
+
 ## 15. Wave 11 - Production Hardening
+
+Status: **Implemented for V1 baseline** in commit `a40f9b9`; pending deployment/security review.
 
 Goal: make the system safe enough to run for real merchants.
 
@@ -561,6 +658,29 @@ Commit gate:
 
 - Security review complete for public checkout and merchant admin.
 - No secrets in client bundle.
+
+Implementation notes:
+
+- Added lightweight in-memory checkout rate limiting.
+- Added checkout honeypot field.
+- Added structured server logs for:
+  - validation failures
+  - rate limiting
+  - order creation
+  - email failures
+- Added app-level `not-found` and `error` pages.
+- Added order export/recovery notes:
+  - `docs/order-export-notes.md`
+- `.env.example` documents all required runtime variables without secrets.
+- Build and typecheck pass after hardening changes.
+
+Manual verification needed:
+
+- Confirm Vercel runtime has all required env values.
+- Confirm no Supabase secret key appears in browser source or network payloads.
+- Try repeated invalid checkout submissions and confirm throttling.
+- Review Vercel logs after a test order and failed email case.
+- Export orders using the SQL in `docs/order-export-notes.md`.
 
 ## 16. Later Waves - Not V1
 

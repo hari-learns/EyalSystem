@@ -15,6 +15,7 @@ type CheckoutPayload = {
     phone10?: unknown;
     address?: unknown;
     note?: unknown;
+    website?: unknown;
   };
   items?: CheckoutItemInput[];
   phoneVerified?: unknown;
@@ -72,8 +73,23 @@ type OrderItemInsert = {
 const PHONE_10_DIGITS = /^\d{10}$/;
 const MAX_CART_LINES = 30;
 const MAX_LINE_QUANTITY = 99;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_ATTEMPTS = 12;
+const checkoutAttempts = new Map<string, { count: number; resetAt: number }>();
 
 export const POST = withSupabase({ auth: "none" }, async (request, ctx) => {
+  const rateLimit = checkRateLimit(getClientIp(request));
+
+  if (!rateLimit.ok) {
+    console.warn(
+      JSON.stringify({
+        event: "checkout_rate_limited",
+        resetAt: rateLimit.resetAt
+      })
+    );
+    return jsonError("Too many checkout attempts. Please wait and try again.", 429);
+  }
+
   let payload: CheckoutPayload;
 
   try {
@@ -85,6 +101,7 @@ export const POST = withSupabase({ auth: "none" }, async (request, ctx) => {
   const parsed = parseCheckoutPayload(payload);
 
   if (!parsed.ok) {
+    console.warn(JSON.stringify({ event: "checkout_validation_failed", error: parsed.error }));
     return jsonError(parsed.error, 400);
   }
 
@@ -103,6 +120,7 @@ export const POST = withSupabase({ auth: "none" }, async (request, ctx) => {
   const store = storeData as StoreRow | null;
 
   if (storeError || !store) {
+    console.warn(JSON.stringify({ event: "checkout_store_unavailable", storeSlug }));
     return jsonError("Store is not available.", 404);
   }
 
@@ -263,6 +281,18 @@ export const POST = withSupabase({ auth: "none" }, async (request, ctx) => {
 
   const finalEmailStatus = emailResult.ok ? "sent" : "failed";
 
+  if (!emailResult.ok) {
+    console.error(
+      JSON.stringify({
+        event: "checkout_email_failed",
+        orderId: order.id,
+        orderNumber: order.order_number,
+        storeSlug,
+        error: emailResult.error
+      })
+    );
+  }
+
   await admin
     .from("orders")
     .update({
@@ -270,6 +300,17 @@ export const POST = withSupabase({ auth: "none" }, async (request, ctx) => {
       email_error: emailResult.ok ? null : emailResult.error
     })
     .eq("id", order.id);
+
+  console.info(
+    JSON.stringify({
+      event: "checkout_order_created",
+      orderId: order.id,
+      orderNumber: order.order_number,
+      storeSlug,
+      totalInr: order.total_inr,
+      emailStatus: finalEmailStatus
+    })
+  );
 
   return Response.json(
     {
@@ -306,8 +347,11 @@ function parseCheckoutPayload(payload: CheckoutPayload):
   const address =
     typeof payload.customer?.address === "string" ? payload.customer.address.trim() : "";
   const note = typeof payload.customer?.note === "string" ? payload.customer.note.trim() : "";
+  const website =
+    typeof payload.customer?.website === "string" ? payload.customer.website.trim() : "";
 
   if (!storeSlug) return { ok: false, error: "Store is required." };
+  if (website) return { ok: false, error: "Checkout could not be accepted." };
   if (customerName.length < 2) return { ok: false, error: "Enter a valid name." };
   if (!PHONE_10_DIGITS.test(phone10)) {
     return { ok: false, error: "Enter a valid 10 digit mobile number." };
@@ -355,4 +399,31 @@ function parseCheckoutPayload(payload: CheckoutPayload):
 
 function jsonError(error: string, status: number) {
   return Response.json({ error }, { status });
+}
+
+function getClientIp(request: Request) {
+  return (
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip") ||
+    "local"
+  );
+}
+
+function checkRateLimit(key: string) {
+  const now = Date.now();
+  const current = checkoutAttempts.get(key);
+
+  if (!current || current.resetAt <= now) {
+    checkoutAttempts.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return { ok: true as const };
+  }
+
+  if (current.count >= RATE_LIMIT_MAX_ATTEMPTS) {
+    return { ok: false as const, resetAt: current.resetAt };
+  }
+
+  current.count += 1;
+  checkoutAttempts.set(key, current);
+
+  return { ok: true as const };
 }

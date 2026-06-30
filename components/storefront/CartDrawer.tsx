@@ -30,7 +30,8 @@ export function CartDrawer({
     customerName: "",
     phone10: "",
     address: "",
-    note: ""
+    note: "",
+    website: ""
   });
 
   function updateField(field: keyof CheckoutFormValues, value: string) {
@@ -147,6 +148,15 @@ export function CartDrawer({
                 value={form.note}
                 placeholder="Timing or delivery note"
                 onChange={(event) => updateField("note", event.target.value)}
+              />
+            </label>
+            <label className="hp-field" aria-hidden="true">
+              Website
+              <input
+                value={form.website}
+                tabIndex={-1}
+                autoComplete="off"
+                onChange={(event) => updateField("website", event.target.value)}
               />
             </label>
           </div>
