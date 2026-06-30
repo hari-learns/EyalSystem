@@ -1,4 +1,5 @@
 import { withSupabase } from "@supabase/server";
+import { sendMerchantOrderEmail, type OrderEmailItem } from "@/lib/email/order-email";
 
 export const runtime = "nodejs";
 
@@ -22,7 +23,9 @@ type CheckoutPayload = {
 type StoreRow = {
   id: string;
   slug: string;
+  name: string;
   status: string;
+  merchant_order_email: string | null;
   settings: Record<string, unknown> | null;
 };
 
@@ -92,7 +95,7 @@ export const POST = withSupabase({ auth: "none" }, async (request, ctx) => {
 
   const { data: storeData, error: storeError } = await admin
     .from("stores")
-    .select("id, slug, status, settings")
+    .select("id, slug, name, status, merchant_order_email, settings")
     .eq("slug", storeSlug)
     .eq("status", "active")
     .single();
@@ -188,16 +191,38 @@ export const POST = withSupabase({ auth: "none" }, async (request, ctx) => {
       customer_address: customer.address,
       customer_note: customer.note || null,
       status: "new",
-      email_status: "not_sent",
+      email_status: "pending",
       subtotal_inr: subtotalInr,
       total_inr: subtotalInr,
       item_count: itemCount
     })
-    .select("id, order_number, total_inr, status")
+    .select(
+      `
+        id,
+        order_number,
+        customer_name,
+        customer_phone,
+        customer_address,
+        customer_note,
+        total_inr,
+        status,
+        email_status
+      `
+    )
     .single();
 
   const order = orderData as
-    | { id: string; order_number: number; total_inr: number; status: string }
+    | {
+        id: string;
+        order_number: number;
+        customer_name: string;
+        customer_phone: string;
+        customer_address: string;
+        customer_note: string | null;
+        total_inr: number;
+        status: string;
+        email_status: "pending" | "sent" | "failed" | "not_sent";
+      }
     | null;
 
   if (orderError || !order) {
@@ -213,13 +238,47 @@ export const POST = withSupabase({ auth: "none" }, async (request, ctx) => {
     return jsonError("Order items could not be saved.", 500);
   }
 
+  const emailResult = await sendMerchantOrderEmail({
+    store: {
+      name: store.name,
+      merchantOrderEmail: store.merchant_order_email
+    },
+    order: {
+      id: order.id,
+      orderNumber: order.order_number,
+      customerName: order.customer_name,
+      customerPhone: order.customer_phone,
+      customerAddress: order.customer_address,
+      customerNote: order.customer_note,
+      totalInr: order.total_inr
+    },
+    items: orderItems.map<OrderEmailItem>((item) => ({
+      productName: item.product_name_snapshot,
+      variantLabel: item.variant_label_snapshot,
+      priceInr: item.price_inr_snapshot,
+      quantity: item.quantity,
+      lineTotalInr: item.line_total_inr
+    }))
+  });
+
+  const finalEmailStatus = emailResult.ok ? "sent" : "failed";
+
+  await admin
+    .from("orders")
+    .update({
+      email_status: finalEmailStatus,
+      email_error: emailResult.ok ? null : emailResult.error
+    })
+    .eq("id", order.id);
+
   return Response.json(
     {
       order: {
         id: order.id,
         orderNumber: order.order_number,
         totalInr: order.total_inr,
-        status: order.status
+        status: order.status,
+        emailStatus: finalEmailStatus
       }
     },
     { status: 201 }

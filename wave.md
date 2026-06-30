@@ -369,6 +369,8 @@ Implementation notes:
 
 ## 10. Wave 6 - Email Order Delivery
 
+Status: implemented, pending live Resend credential verification.
+
 Goal: merchant receives order emails.
 
 Build:
@@ -399,6 +401,20 @@ Commit gate:
 
 - No email API secrets in frontend.
 - Email failure does not lose orders.
+
+Implementation notes:
+
+- Order email delivery uses Resend from server-only code.
+- Required runtime env:
+  - `RESEND_API_KEY`
+  - `ORDER_EMAIL_FROM`
+  - `ORDER_EMAIL_TO` unless `stores.merchant_order_email` is populated
+- Order creation now saves the order with `email_status = pending`, attempts merchant email delivery, then updates to `sent` or `failed`.
+- Email failure does not roll back or delete the order.
+- `email_error` records the failure message for later platform/admin visibility.
+- Verified the no-secret/front-end gate by checking env usage is limited to `.env.example`, `lib/email`, and the server order route.
+- Verified failure mode with missing Resend config: API still returned order success and DB stored `email_status = failed`.
+- Live send verification is blocked until real Resend env values and a recipient are configured.
 
 ## 11. Wave 7 - Merchant Admin Auth And Product Operations
 
