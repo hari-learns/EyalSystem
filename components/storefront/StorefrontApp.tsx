@@ -93,7 +93,11 @@ export function StorefrontApp({ store }: StorefrontAppProps) {
             <TrustStrip />
           </div>
         </section>
-        <ProductGrid products={store.products} onAddToCart={addToCart} />
+        <ProductGrid
+          products={store.products}
+          categories={store.categories}
+          onAddToCart={addToCart}
+        />
         <ProcessSection />
       </main>
       <Footer store={store} />

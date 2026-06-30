@@ -19,7 +19,7 @@ export function ProductCard({
   onSelectSize,
   onAdd
 }: ProductCardProps) {
-  const selectedSize = product.sizes[selectedSizeIndex];
+  const selectedVariant = product.variants[selectedSizeIndex];
 
   return (
     <article className="card in-view" data-product={product.id}>
@@ -34,22 +34,24 @@ export function ProductCard({
         <h3>{product.name}</h3>
         <p className="note">{product.note}</p>
         <div className="size-row">
-          {product.sizes.map((size, index) => (
+          {product.variants.map((variant, index) => (
             <button
               className="pill"
               type="button"
               aria-pressed={selectedSizeIndex === index}
               onClick={() => onSelectSize(index)}
-              key={size.label}
+              key={variant.label}
             >
-              {size.label}
+              {variant.label}
             </button>
           ))}
         </div>
         <div className="price-row">
           <div className="price-main">
-            <span className="amount">{formatMoney(selectedSize.price)}</span>
-            <span className="per">= {formatPer100Ml(selectedSize.price, selectedSize.ml)}</span>
+            <span className="amount">{formatMoney(selectedVariant.price)}</span>
+            <span className="per">
+              = {formatPer100Ml(selectedVariant.price, selectedVariant.ml)}
+            </span>
           </div>
         </div>
         <button className={added ? "add-btn added" : "add-btn"} type="button" onClick={onAdd}>

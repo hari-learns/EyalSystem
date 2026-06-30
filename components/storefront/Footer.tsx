@@ -22,9 +22,9 @@ export function Footer({ store }: FooterProps) {
           <div>
             <h5>Shop</h5>
             <ul>
-              {store.products.map((product) => (
-                <li key={product.id}>
-                  <a href="#products">{product.shortName}</a>
+              {store.categories.map((category) => (
+                <li key={category.id}>
+                  <a href={`#category-${category.id}`}>{category.name}</a>
                 </li>
               ))}
             </ul>
