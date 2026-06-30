@@ -418,7 +418,7 @@ Implementation notes:
 
 ## 11. Wave 7 - Merchant Admin Auth And Product Operations
 
-Status: **Implemented** in commit `a40f9b9`; pending manual Supabase Auth merchant-user verification.
+Status: **Implemented** in commit `ac13bc9`; pending manual Supabase Auth merchant-user verification.
 
 Goal: merchant can update operational product fields.
 
@@ -473,7 +473,7 @@ Manual verification needed:
 
 ## 12. Wave 8 - Merchant Order History And Search
 
-Status: **Implemented** in commit `a40f9b9`; pending manual merchant-user verification with real orders.
+Status: **Implemented** in commit `ac13bc9`; pending manual merchant-user verification with real orders.
 
 Goal: merchant can use the system operationally after orders arrive.
 
@@ -532,7 +532,7 @@ Manual verification needed:
 
 ## 13. Wave 9 - Platform Owner Admin And Commission
 
-Status: **Implemented** in commit `a40f9b9`; pending owner env and manual report verification.
+Status: **Implemented** in commit `ac13bc9`; pending owner env and manual report verification.
 
 Goal: platform owner can track business value and commission.
 
@@ -586,7 +586,7 @@ Manual verification needed:
 
 ## 14. Wave 10 - QR And Merchant Onboarding Workflow
 
-Status: **Partially implemented** in commit `a40f9b9`.
+Status: **Partially implemented** in commit `ac13bc9`.
 
 Goal: new stores can be created repeatably.
 
@@ -635,7 +635,7 @@ Manual verification needed:
 
 ## 15. Wave 11 - Production Hardening
 
-Status: **Implemented for V1 baseline** in commit `a40f9b9`; pending deployment/security review.
+Status: **Implemented for V1 baseline** in commit `ac13bc9`; pending deployment/security review.
 
 Goal: make the system safe enough to run for real merchants.
 
