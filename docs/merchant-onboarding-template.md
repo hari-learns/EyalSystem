@@ -28,12 +28,21 @@ Use this checklist for every new local merchant. Do not create a new storefront 
 2. Set `merchant_order_email`.
 3. Create categories.
 4. Create products and variants.
-5. Create Supabase Auth user for the merchant.
-6. Insert `merchant_users` row linking the user to the store.
-7. Set `commission_rules`.
-8. Verify `/s/:storeSlug`.
-9. Verify `/api/stores/:storeSlug/qr`.
-10. Print the QR and test it from a phone.
+5. Create or update the merchant user and `merchant_users` link:
+
+```bash
+npm run merchant:setup -- \
+  --store eyal-chekku-oils \
+  --email merchant@example.com \
+  --password 'StrongPass123!' \
+  --role owner \
+  --order-email merchant@example.com
+```
+
+6. Set `commission_rules`.
+7. Verify `/s/:storeSlug`.
+8. Verify `/api/stores/:storeSlug/qr`.
+9. Print the QR and test it from a phone.
 
 ## Manual Verification
 
@@ -42,6 +51,16 @@ Use this checklist for every new local merchant. Do not create a new storefront 
 - Product description, price, and availability updates reflect on storefront.
 - Merchant can search orders by 10 digit Indian phone number.
 - Owner report includes the store.
+
+## Demo Store
+
+A second demo store exists to prove storefront reuse and store isolation:
+
+```txt
+/s/demo-organic-mart
+```
+
+Do not treat demo data as a real merchant. Use it for testing new onboarding and access-isolation changes.
 
 ## Eyal First Store
 

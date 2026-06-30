@@ -10,7 +10,8 @@
     "db:push": "supabase db push",
     "db:seed": "supabase db query --file supabase/seed.sql --linked",
     "db:seed:local": "supabase db query --file supabase/seed.sql --local",
-    "db:reset": "supabase db reset"
+    "db:reset": "supabase db reset",
+    "merchant:setup": "node --env-file=.env.local scripts/setup-merchant.mjs"
   },
   "dependencies": {
     "@supabase/server": "^1.2.0",

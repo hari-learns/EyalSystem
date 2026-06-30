@@ -23,51 +23,32 @@ type CheckoutPayload = {
 
 type StoreRow = {
   id: string;
-  slug: string;
   name: string;
-  status: string;
   merchant_order_email: string | null;
-  settings: Record<string, unknown> | null;
 };
 
-type VariantRow = {
-  id: string;
-  product_id: string;
-  label: string;
-  unit: string;
-  unit_value: number;
-  price_inr: number;
-  availability_status: "available" | "unavailable";
-  is_visible: boolean;
-  products:
-    | {
-        id: string;
-        store_id: string;
-        name: string;
-        availability_status: "available" | "unavailable";
-        is_visible: boolean;
-      }
-    | {
-        id: string;
-        store_id: string;
-        name: string;
-        availability_status: "available" | "unavailable";
-        is_visible: boolean;
-      }[];
-};
-
-type OrderItemInsert = {
-  order_id: string;
-  store_id: string;
-  product_id: string;
-  product_variant_id: string;
-  product_name_snapshot: string;
-  variant_label_snapshot: string;
-  unit_snapshot: string;
-  unit_value_snapshot: number;
-  price_inr_snapshot: number;
+type OrderRpcItem = {
+  productName: string;
+  variantLabel: string;
+  priceInr: number;
   quantity: number;
-  line_total_inr: number;
+  lineTotalInr: number;
+};
+
+type OrderRpcResult = {
+  store: StoreRow;
+  order: {
+    id: string;
+    orderNumber: number;
+    customerName: string;
+    customerPhone: string;
+    customerAddress: string;
+    customerNote: string | null;
+    totalInr: number;
+    status: string;
+    emailStatus: "pending" | "sent" | "failed" | "not_sent";
+  };
+  items: OrderRpcItem[];
 };
 
 const PHONE_10_DIGITS = /^\d{10}$/;
@@ -110,172 +91,57 @@ export const POST = withSupabase({ auth: "none" }, async (request, ctx) => {
   // Keep the runtime client typed loosely here and validate DB rows explicitly below.
   const admin = ctx.supabaseAdmin as any;
 
-  const { data: storeData, error: storeError } = await admin
-    .from("stores")
-    .select("id, slug, name, status, merchant_order_email, settings")
-    .eq("slug", storeSlug)
-    .eq("status", "active")
-    .single();
+  const { data: rpcData, error: rpcError } = await admin.rpc("create_checkout_order", {
+    p_store_slug: storeSlug,
+    p_customer_name: customer.name,
+    p_customer_phone: customer.phone,
+    p_customer_address: customer.address,
+    p_customer_note: customer.note || null,
+    p_items: items.map((item) => ({
+      variant_id: item.variantId,
+      quantity: item.quantity
+    })),
+    p_phone_verified: phoneVerified
+  });
 
-  const store = storeData as StoreRow | null;
-
-  if (storeError || !store) {
-    console.warn(JSON.stringify({ event: "checkout_store_unavailable", storeSlug }));
-    return jsonError("Store is not available.", 404);
+  if (rpcError || !rpcData) {
+    const mapped = mapOrderRpcError(rpcError?.message ?? "");
+    console.warn(
+      JSON.stringify({
+        event: "checkout_rpc_failed",
+        storeSlug,
+        error: rpcError?.message
+      })
+    );
+    return jsonError(mapped.message, mapped.status);
   }
 
-  const requiresPhoneVerification = Boolean(store.settings?.requires_phone_verification);
+  const created = rpcData as OrderRpcResult;
 
-  if (requiresPhoneVerification && phoneVerified !== true) {
-    return jsonError("Phone verification is required before checkout.", 403);
-  }
+  return finishOrder(admin, storeSlug, created);
+});
 
-  const requestedVariantIds = items.map((item) => item.variantId);
-  const { data: variantsData, error: variantsError } = await admin
-    .from("product_variants")
-    .select(
-      `
-        id,
-        product_id,
-        label,
-        unit,
-        unit_value,
-        price_inr,
-        availability_status,
-        is_visible,
-        products!inner (
-          id,
-          store_id,
-          name,
-          availability_status,
-          is_visible
-        )
-      `
-    )
-    .in("id", requestedVariantIds);
-
-  const variants = (variantsData ?? []) as VariantRow[];
-
-  if (variantsError || !variants) {
-    return jsonError("Products could not be verified.", 500);
-  }
-
-  const variantsById = new Map(variants.map((variant) => [variant.id, variant]));
-  const orderItems: Omit<OrderItemInsert, "order_id">[] = [];
-  let itemCount = 0;
-  let subtotalInr = 0;
-
-  for (const item of items) {
-    const variant = variantsById.get(item.variantId);
-    const product = Array.isArray(variant?.products) ? variant?.products[0] : variant?.products;
-
-    if (!variant || !product || product.store_id !== store.id) {
-      return jsonError("One or more cart items are not available.", 400);
-    }
-
-    if (
-      !variant.is_visible ||
-      variant.availability_status !== "available" ||
-      !product.is_visible ||
-      product.availability_status !== "available"
-    ) {
-      return jsonError("One or more cart items are currently unavailable.", 400);
-    }
-
-    const lineTotal = variant.price_inr * item.quantity;
-    itemCount += item.quantity;
-    subtotalInr += lineTotal;
-
-    orderItems.push({
-      store_id: store.id,
-      product_id: product.id,
-      product_variant_id: variant.id,
-      product_name_snapshot: product.name,
-      variant_label_snapshot: variant.label,
-      unit_snapshot: variant.unit,
-      unit_value_snapshot: variant.unit_value,
-      price_inr_snapshot: variant.price_inr,
-      quantity: item.quantity,
-      line_total_inr: lineTotal
-    });
-  }
-
-  const { data: orderData, error: orderError } = await admin
-    .from("orders")
-    .insert({
-      store_id: store.id,
-      customer_name: customer.name,
-      customer_phone: customer.phone,
-      customer_address: customer.address,
-      customer_note: customer.note || null,
-      status: "new",
-      email_status: "pending",
-      subtotal_inr: subtotalInr,
-      total_inr: subtotalInr,
-      item_count: itemCount
-    })
-    .select(
-      `
-        id,
-        order_number,
-        customer_name,
-        customer_phone,
-        customer_address,
-        customer_note,
-        total_inr,
-        status,
-        email_status
-      `
-    )
-    .single();
-
-  const order = orderData as
-    | {
-        id: string;
-        order_number: number;
-        customer_name: string;
-        customer_phone: string;
-        customer_address: string;
-        customer_note: string | null;
-        total_inr: number;
-        status: string;
-        email_status: "pending" | "sent" | "failed" | "not_sent";
-      }
-    | null;
-
-  if (orderError || !order) {
-    return jsonError("Order could not be saved.", 500);
-  }
-
-  const { error: itemInsertError } = await admin
-    .from("order_items")
-    .insert(orderItems.map((item) => ({ ...item, order_id: order.id })));
-
-  if (itemInsertError) {
-    await admin.from("orders").delete().eq("id", order.id);
-    return jsonError("Order items could not be saved.", 500);
-  }
-
+async function finishOrder(admin: any, storeSlug: string, created: OrderRpcResult) {
   const emailResult = await sendMerchantOrderEmail({
     store: {
-      name: store.name,
-      merchantOrderEmail: store.merchant_order_email
+      name: created.store.name,
+      merchantOrderEmail: created.store.merchant_order_email
     },
     order: {
-      id: order.id,
-      orderNumber: order.order_number,
-      customerName: order.customer_name,
-      customerPhone: order.customer_phone,
-      customerAddress: order.customer_address,
-      customerNote: order.customer_note,
-      totalInr: order.total_inr
+      id: created.order.id,
+      orderNumber: created.order.orderNumber,
+      customerName: created.order.customerName,
+      customerPhone: created.order.customerPhone,
+      customerAddress: created.order.customerAddress,
+      customerNote: created.order.customerNote,
+      totalInr: created.order.totalInr
     },
-    items: orderItems.map<OrderEmailItem>((item) => ({
-      productName: item.product_name_snapshot,
-      variantLabel: item.variant_label_snapshot,
-      priceInr: item.price_inr_snapshot,
+    items: created.items.map<OrderEmailItem>((item) => ({
+      productName: item.productName,
+      variantLabel: item.variantLabel,
+      priceInr: item.priceInr,
       quantity: item.quantity,
-      lineTotalInr: item.line_total_inr
+      lineTotalInr: item.lineTotalInr
     }))
   });
 
@@ -285,8 +151,8 @@ export const POST = withSupabase({ auth: "none" }, async (request, ctx) => {
     console.error(
       JSON.stringify({
         event: "checkout_email_failed",
-        orderId: order.id,
-        orderNumber: order.order_number,
+        orderId: created.order.id,
+        orderNumber: created.order.orderNumber,
         storeSlug,
         error: emailResult.error
       })
@@ -299,15 +165,15 @@ export const POST = withSupabase({ auth: "none" }, async (request, ctx) => {
       email_status: finalEmailStatus,
       email_error: emailResult.ok ? null : emailResult.error
     })
-    .eq("id", order.id);
+    .eq("id", created.order.id);
 
   console.info(
     JSON.stringify({
       event: "checkout_order_created",
-      orderId: order.id,
-      orderNumber: order.order_number,
+      orderId: created.order.id,
+      orderNumber: created.order.orderNumber,
       storeSlug,
-      totalInr: order.total_inr,
+      totalInr: created.order.totalInr,
       emailStatus: finalEmailStatus
     })
   );
@@ -315,16 +181,16 @@ export const POST = withSupabase({ auth: "none" }, async (request, ctx) => {
   return Response.json(
     {
       order: {
-        id: order.id,
-        orderNumber: order.order_number,
-        totalInr: order.total_inr,
-        status: order.status,
+        id: created.order.id,
+        orderNumber: created.order.orderNumber,
+        totalInr: created.order.totalInr,
+        status: created.order.status,
         emailStatus: finalEmailStatus
       }
     },
     { status: 201 }
   );
-});
+}
 
 function parseCheckoutPayload(payload: CheckoutPayload):
   | {
@@ -399,6 +265,31 @@ function parseCheckoutPayload(payload: CheckoutPayload):
 
 function jsonError(error: string, status: number) {
   return Response.json({ error }, { status });
+}
+
+function mapOrderRpcError(message: string) {
+  if (message.includes("STORE_UNAVAILABLE")) {
+    return { message: "Store is not available.", status: 404 };
+  }
+
+  if (message.includes("PHONE_VERIFICATION_REQUIRED")) {
+    return { message: "Phone verification is required before checkout.", status: 403 };
+  }
+
+  if (message.includes("CART_ITEM_UNAVAILABLE")) {
+    return { message: "One or more cart items are currently unavailable.", status: 400 };
+  }
+
+  if (
+    message.includes("INVALID_") ||
+    message.includes("CART_EMPTY") ||
+    message.includes("CART_TOO_LARGE") ||
+    message.includes("DUPLICATE_CART_ITEM")
+  ) {
+    return { message: "Checkout details are invalid.", status: 400 };
+  }
+
+  return { message: "Order could not be saved.", status: 500 };
 }
 
 function getClientIp(request: Request) {

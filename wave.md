@@ -361,9 +361,9 @@ Implementation notes:
 
 - Checkout must submit variant IDs and quantities only.
 - Server must rebuild product names, prices, totals, and item snapshots from Supabase.
+- Order creation now uses `public.create_checkout_order(...)` so order and order item writes happen in one Postgres transaction.
 - Customer phone is stored only as normalized `+91XXXXXXXXXX`.
 - The OTP hook lives in checkout validation through `stores.settings.requires_phone_verification`; it remains disabled for V1.
-- Short-term note: order and item writes are handled server-side with cleanup on item insert failure. Before meaningful traffic, move this into a Postgres RPC so order creation is fully atomic.
 - Verified with an API integration test for invalid phone rejection, valid order creation, and immutable item price snapshots after a live variant price change.
 - Verified the mobile checkout drawer at 390px width; the app now declares an explicit mobile viewport and the drawer uses full mobile width.
 
@@ -621,6 +621,10 @@ Implementation notes:
 - Added QR display in owner admin tab.
 - Added onboarding template:
   - `docs/merchant-onboarding-template.md`
+- Added merchant setup script:
+  - `npm run merchant:setup -- --store <slug> --email <email> --password <password>`
+- Added second demo store:
+  - `/s/demo-organic-mart`
 - QR endpoint was smoke-tested and returns SVG.
 - The storefront remains data-driven by store slug; no code duplication is needed for another merchant storefront.
 
@@ -629,7 +633,6 @@ Manual verification needed:
 - Deploy to Vercel and set `NEXT_PUBLIC_SITE_URL`.
 - Open `/api/stores/eyal-chekku-oils/qr`.
 - Scan QR from a phone and confirm it opens the deployed `/s/eyal-chekku-oils`.
-- Add a second demo store in Supabase.
 - Confirm second store works without code changes.
 - Confirm second store merchant sees only that store.
 
