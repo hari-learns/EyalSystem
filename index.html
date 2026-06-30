@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eyal Organic Products — Cold Wood-Pressed Oils</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-press" viewBox="0 0 24 24"><circle cx="12" cy="16" r="5.2"/><line x1="12" y1="3" x2="12" y2="10.6"/><circle cx="12" cy="9" r="1.3" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 2.6C12 2.6 5.6 11.4 5.6 15.8a6.4 6.4 0 0012.8 0C18.4 11.4 12 2.6 12 2.6z"/></symbol>
+  <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M4.5 19c0-8.2 6-15 15-15-1 9.7-5.6 16.8-13.7 16.8-.8 0-1.3-.8-1.3-1.8z"/><path d="M6.2 18c2.4-3 4.8-7 6.8-11"/></symbol>
+  <symbol id="i-seal" viewBox="0 0 24 24"><circle cx="12" cy="9.2" r="6"/><path d="M8.3 14.6L6.8 21l5.2-3 5.2 3-1.5-6.4"/></symbol>
+  <symbol id="i-bag" viewBox="0 0 24 24"><path d="M6 8h12l-1 12H7L6 8z"/><path d="M9 8a3 3 0 016 0"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></symbol>
+  <symbol id="i-seed" viewBox="0 0 24 24"><ellipse cx="12" cy="14" rx="4" ry="6.2" transform="rotate(-18 12 14)"/><path d="M12.5 8c.8-3 2.8-4.2 4.8-4.2"/></symbol>
+  <symbol id="i-bottle" viewBox="0 0 24 24"><path d="M10 2.2h4v2.9l2 2.2v12.7a2 2 0 01-2 2h-4a2 2 0 01-2-2V7.3l2-2.2V2.2z"/><line x1="8" y1="11.4" x2="16" y2="11.4"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M4 8.5L12 4l8 4.5-8 4.5-8-4.5z"/><path d="M4 14.5l8 4.5 8-4.5"/></symbol>
+</svg>
+
+<header class="site">
+  <div class="nav">
+    <a href="#top" class="brand"><span class="dot"></span>EYAL <span style="font-family:'Manrope',sans-serif;font-weight:600;font-size:0.62em;color:var(--ink-soft);letter-spacing:0.06em;margin-left:2px;">ORGANIC</span></a>
+    <nav class="navlinks">
+      <a href="#products">Our Oils</a>
+      <a href="#process">The Press</a>
+      <a href="#footer-contact">Contact</a>
+    </nav>
+    <button class="cart-btn" id="cartBtn" aria-label="Open cart">
+      <svg class="icon"><use href="#i-bag"/></svg>
+      <span>Cart</span>
+      <span class="cart-badge hidden" id="cartBadge">0</span>
+    </button>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="hero">
+    <div class="hero-glow"></div>
+    <div class="wrap">
+      <div class="hero-inner">
+        <div class="eyebrow">Wood-Pressed · Small Batch · Chennai</div>
+        <h1>Pressed slow.<br>Tastes <em>whole.</em></h1>
+        <p class="lede">We still press the old way — a wooden ghani, turning slow, never touching heat. What comes out the other end is oil the way it used to taste, before the shortcuts.</p>
+        <div class="hero-ctas">
+          <button class="btn-primary" onclick="document.getElementById('products').scrollIntoView({behavior:'smooth'})">
+            Shop the range
+            <svg class="icon" style="width:15px;height:15px;"><use href="#i-bag"/></svg>
+          </button>
+          <a href="#process" class="link-arrow">How we press it →</a>
+        </div>
+      </div>
+
+      <div class="trust-strip">
+        <div class="trust-card">
+          <svg class="icon"><use href="#i-press"/></svg>
+          <h4>Wood-Pressed</h4>
+          <p>No steel expellers. Just a wooden ghani, turning slow.</p>
+        </div>
+        <div class="trust-card">
+          <svg class="icon"><use href="#i-drop"/></svg>
+          <h4>Zero Heat</h4>
+          <p>Cold-extracted, so nutrients stay where they belong.</p>
+        </div>
+        <div class="trust-card">
+          <svg class="icon"><use href="#i-leaf"/></svg>
+          <h4>Nothing Added</h4>
+          <p>No solvents, no refining, no quiet additives.</p>
+        </div>
+        <div class="trust-card">
+          <svg class="icon"><use href="#i-seal"/></svg>
+          <h4>Small Batch</h4>
+          <p>Pressed fresh in Chennai, in batches we can vouch for.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="products">
+    <div class="wrap">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">The Range</div>
+          <h2>Four oils, one press.</h2>
+        </div>
+        <p class="section-note">Pick a size per oil — the price and the per-100ml rate update as you go.</p>
+      </div>
+
+      <div class="grid" id="productGrid"></div>
+    </div>
+  </section>
+
+  <section id="process">
+    <div class="wrap">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">How We Press</div>
+          <h2>From seed to bottle, in four honest steps.</h2>
+        </div>
+        <p class="section-note">No hydraulics, no hexane, no rush. Just enough patience to keep the oil intact.</p>
+      </div>
+
+      <div class="steps" id="stepsTrack">
+        <div class="step">
+          <div class="step-dot"></div>
+          <div class="step-num">01</div>
+          <h4>Sourced</h4>
+          <p>Whole seeds and kernels, bought direct from growers we know by name.</p>
+        </div>
+        <div class="step">
+          <div class="step-dot"></div>
+          <div class="step-num">02</div>
+          <h4>Pressed</h4>
+          <p>A wooden ghani turns slow — low friction, low heat, every bit of flavor kept in.</p>
+        </div>
+        <div class="step">
+          <div class="step-dot"></div>
+          <div class="step-num">03</div>
+          <h4>Settled</h4>
+          <p>The oil rests for days so natural sediment falls away on its own.</p>
+        </div>
+        <div class="step">
+          <div class="step-dot"></div>
+          <div class="step-num">04</div>
+          <h4>Bottled</h4>
+          <p>Filtered, never refined. Sealed fresh, with nothing held back.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer id="footer-contact">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <div class="brand"><span class="dot"></span>EYAL ORGANIC</div>
+        <p>Cold wood-pressed oils, pressed fresh in small batches out of Chennai. No heat, no shortcuts, no chemicals.</p>
+      </div>
+      <div>
+        <h5>Shop</h5>
+        <ul>
+          <li><a href="#products">Coconut Oil</a></li>
+          <li><a href="#products">Sesame Oil</a></li>
+          <li><a href="#products">Groundnut Oil</a></li>
+          <li><a href="#products">Mustard Oil</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>Eyal</h5>
+        <ul>
+          <li><a href="#process">Our Process</a></li>
+          <li><a href="#top">Our Story</a></li>
+          <li><a href="#footer-contact">Get in Touch</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>© 2026 Eyal Organic Products.</span>
+      <span>Chennai, India</span>
+    </div>
+  </div>
+</footer>
+
+<div class="overlay" id="overlay"></div>
+<aside class="drawer" id="drawer" aria-label="Shopping cart">
+  <div class="drawer-head">
+    <h3>Your Cart</h3>
+    <button class="icon-btn" id="closeDrawer" aria-label="Close cart"><svg class="icon" style="width:16px;height:16px;"><use href="#i-close"/></svg></button>
+  </div>
+  <div class="drawer-items" id="drawerItems"></div>
+  <div class="drawer-foot">
+    <div class="subtotal-row">
+      <span>Subtotal</span>
+      <span class="amount" id="subtotalAmount">₹0</span>
+    </div>
+    <button class="checkout-btn" id="checkoutBtn">Checkout</button>
+  </div>
+</aside>
+
+<div class="toast" id="toast">
+  <svg class="icon"><use href="#i-check"/></svg>
+  <span id="toastMsg">Added to cart</span>
+</div>
+
+<script src="script.js"></script>
+
+</body>
+</html>
