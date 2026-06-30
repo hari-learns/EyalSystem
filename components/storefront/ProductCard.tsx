@@ -20,9 +20,16 @@ export function ProductCard({
   onAdd
 }: ProductCardProps) {
   const selectedVariant = product.variants[selectedSizeIndex];
+  const productAvailable = (product.availabilityStatus ?? "available") === "available";
+  const selectedVariantAvailable =
+    (selectedVariant?.availabilityStatus ?? "available") === "available";
+  const canAdd = productAvailable && selectedVariantAvailable && Boolean(selectedVariant);
 
   return (
-    <article className="card in-view" data-product={product.id}>
+    <article
+      className={productAvailable ? "card in-view" : "card in-view unavailable"}
+      data-product={product.id}
+    >
       <div className="card-media">
         <img src={product.image} alt={product.name} loading="lazy" />
         <div className="organic-seal">
@@ -39,6 +46,7 @@ export function ProductCard({
               className="pill"
               type="button"
               aria-pressed={selectedSizeIndex === index}
+              disabled={(variant.availabilityStatus ?? "available") === "unavailable"}
               onClick={() => onSelectSize(index)}
               key={variant.label}
             >
@@ -48,13 +56,24 @@ export function ProductCard({
         </div>
         <div className="price-row">
           <div className="price-main">
-            <span className="amount">{formatMoney(selectedVariant.price)}</span>
-            <span className="per">
-              = {formatPer100Ml(selectedVariant.price, selectedVariant.ml)}
-            </span>
+            {selectedVariant ? (
+              <>
+                <span className="amount">{formatMoney(selectedVariant.price)}</span>
+                <span className="per">
+                  = {formatPer100Ml(selectedVariant.price, selectedVariant.ml)}
+                </span>
+              </>
+            ) : (
+              <span className="amount">Unavailable</span>
+            )}
           </div>
         </div>
-        <button className={added ? "add-btn added" : "add-btn"} type="button" onClick={onAdd}>
+        <button
+          className={added ? "add-btn added" : "add-btn"}
+          type="button"
+          onClick={onAdd}
+          disabled={!canAdd}
+        >
           {added ? (
             <>
               <Check aria-hidden="true" size={13} strokeWidth={1.9} />
@@ -63,7 +82,7 @@ export function ProductCard({
           ) : (
             <>
               <ShoppingBag aria-hidden="true" size={13} strokeWidth={1.9} />
-              Add to cart
+              {canAdd ? "Add to cart" : "Unavailable"}
             </>
           )}
         </button>

@@ -157,6 +157,8 @@ For future stores, the storefront shell does not change. Only data changes.
 
 ## 5. Wave 1 - Next.js Foundation And Existing Eyal Theme
 
+Status: **Done** in commit `7bf6e11`.
+
 Goal: move from static HTML/CSS/JS toward a structured app without changing the product behavior yet.
 
 Build:
@@ -187,7 +189,15 @@ Commit gate:
 - Mobile and desktop screenshots checked.
 - No product/order DB work in this wave.
 
+Notes:
+
+- The old static files were kept as legacy reference.
+- The first usable route is `/s/eyal-chekku-oils`.
+- Checkout intentionally remains preview-only.
+
 ## 6. Wave 2 - Store/Product Data Model In Code
+
+Status: **Done** in commit `90520c3`.
 
 Goal: make the app data-driven before adding Supabase.
 
@@ -225,7 +235,15 @@ Commit gate:
 - Local data can be swapped to another fake store without changing component logic.
 - No Supabase dependency yet.
 
+Notes:
+
+- The component-facing store shape became reusable: store metadata, categories, products, and variants.
+- Eyal has 10 products in local fallback data.
+- Missing product-specific images are still placeholders for some products until platform-managed assets are added.
+
 ## 7. Wave 3 - Supabase Schema And Seed Data
+
+Status: **Done** in commit `522c39b`.
 
 Goal: introduce the single database for multiple stores.
 
@@ -257,7 +275,18 @@ Commit gate:
 - Migration can be reset and reapplied.
 - Seed is idempotent or clearly documented.
 
+Notes:
+
+- Supabase schema and Eyal seed were created under `supabase/`.
+- Remote seed was verified with 1 store, 4 categories, 10 products, and 18 variants.
+- `@supabase/server` was added with health and JWT-protected smoke-test route handlers.
+- `.env.local` is intentionally ignored. Never commit Supabase secret keys.
+- Merchant image editing remains out of scope. Product image paths are platform-managed.
+- Public RLS read policies exist for active stores and visible catalog rows.
+
 ## 8. Wave 4 - DB-Backed Public Storefront
+
+Status: **Done**.
 
 Goal: public storefront reads live store/product data from Supabase.
 
@@ -280,6 +309,13 @@ Commit gate:
 
 - No hardcoded Eyal products remain in UI logic.
 - Store slug not found returns a clean not-found state.
+
+Notes:
+
+- `/s/:storeSlug` now loads active store, category, product, and variant data from Supabase.
+- The route is dynamic so merchant/catalog updates can be reflected without a rebuild.
+- Local Eyal fallback is allowed only in development. Production should fail closed with not-found/error behavior instead of silently serving stale hardcoded catalog data.
+- Product and variant `availability_status` is mapped into the UI; unavailable items cannot be added to cart.
 
 ## 9. Wave 5 - Checkout And Order Creation
 
@@ -512,4 +548,3 @@ Do not build these until Eyal and at least one more store are live:
 - Delivery partner integration.
 
 These are valid future features, but building them before V1 will slow the system down and increase bug surface.
-

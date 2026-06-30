@@ -1,7 +1,9 @@
 export type ProductVariant = {
+  id?: string;
   label: string;
   ml: number;
   price: number;
+  availabilityStatus?: "available" | "unavailable";
 };
 
 export type StoreCategory = {
@@ -17,6 +19,7 @@ export type Product = {
   shortName: string;
   note: string;
   image: string;
+  availabilityStatus?: "available" | "unavailable";
   variants: ProductVariant[];
 };
 
@@ -77,9 +80,9 @@ export const eyalStore: StorefrontStore = {
       note: "Light and faintly sweet - good for tempering, hair and skin.",
       image: "/images/coconut.jpg",
       variants: [
-        { label: "500 ml", ml: 500, price: 200 },
-        { label: "1 L", ml: 1000, price: 400 },
-        { label: "5 L", ml: 5000, price: 1970 }
+        { id: "coconut-500ml", label: "500 ml", ml: 500, price: 200, availabilityStatus: "available" },
+        { id: "coconut-1l", label: "1 L", ml: 1000, price: 400, availabilityStatus: "available" },
+        { id: "coconut-5l", label: "5 L", ml: 5000, price: 1970, availabilityStatus: "available" }
       ]
     },
     {

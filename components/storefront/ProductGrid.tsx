@@ -14,7 +14,15 @@ type ProductGridProps = {
 
 export function ProductGrid({ products, categories, onAddToCart }: ProductGridProps) {
   const initialSelected = useMemo(
-    () => Object.fromEntries(products.map((product) => [product.id, 0])),
+    () =>
+      Object.fromEntries(
+        products.map((product) => {
+          const firstAvailable = product.variants.findIndex(
+            (variant) => (variant.availabilityStatus ?? "available") === "available"
+          );
+          return [product.id, firstAvailable >= 0 ? firstAvailable : 0];
+        })
+      ),
     [products]
   );
   const [selected, setSelected] = useState<Record<string, number>>(initialSelected);
@@ -81,8 +89,13 @@ export function ProductGrid({ products, categories, onAddToCart }: ProductGridPr
   }
 
   function addProduct(product: Product) {
+    if ((product.availabilityStatus ?? "available") === "unavailable") return;
+
     const sizeIndex = selected[product.id] ?? 0;
     const size = product.variants[sizeIndex];
+
+    if (!size || (size.availabilityStatus ?? "available") === "unavailable") return;
+
     onAddToCart(
       {
         id: product.id,
