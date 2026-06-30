@@ -682,6 +682,20 @@ Manual verification needed:
 - Review Vercel logs after a test order and failed email case.
 - Export orders using the SQL in `docs/order-export-notes.md`.
 
+Deployment notes:
+
+- GitHub remote: `https://github.com/hari-learns/EyalSystem.git`
+- Pushed branch: `main`
+- Vercel project: `eyal-system`
+- Temporary production URL: `https://eyal-system.vercel.app`
+- Verified deployed routes:
+  - `/s/eyal-chekku-oils` returned `200`
+  - `/admin` returned `200`
+  - `/api/admin/me` returned `401` without a user token
+  - `/api/stores/eyal-chekku-oils/qr` returned SVG
+  - `/api/orders` accepted a smoke order and stored it; smoke order was deleted afterward
+- Vercel log scan showed the expected `checkout_email_failed` entry because Resend env is not configured yet.
+
 ## 16. Later Waves - Not V1
 
 Do not build these until Eyal and at least one more store are live:
