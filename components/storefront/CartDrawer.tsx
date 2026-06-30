@@ -1,8 +1,9 @@
 "use client";
 
+import { FormEvent, useState } from "react";
 import { Minus, Plus, ShoppingBag, X } from "lucide-react";
 import { formatMoney } from "@/lib/money";
-import type { CartItem } from "./types";
+import type { CartItem, CheckoutFormValues } from "./types";
 
 type CartDrawerProps = {
   cart: CartItem[];
@@ -11,7 +12,8 @@ type CartDrawerProps = {
   onClose: () => void;
   onQuantityChange: (id: string, label: string, delta: number) => void;
   onRemove: (id: string, label: string) => void;
-  onCheckout: () => void;
+  onCheckout: (values: CheckoutFormValues) => void;
+  checkoutLoading: boolean;
 };
 
 export function CartDrawer({
@@ -21,8 +23,28 @@ export function CartDrawer({
   onClose,
   onQuantityChange,
   onRemove,
-  onCheckout
+  onCheckout,
+  checkoutLoading
 }: CartDrawerProps) {
+  const [form, setForm] = useState<CheckoutFormValues>({
+    customerName: "",
+    phone10: "",
+    address: "",
+    note: ""
+  });
+
+  function updateField(field: keyof CheckoutFormValues, value: string) {
+    setForm((current) => ({
+      ...current,
+      [field]: field === "phone10" ? value.replace(/\D/g, "").slice(0, 10) : value
+    }));
+  }
+
+  function submitCheckout(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onCheckout(form);
+  }
+
   return (
     <>
       <div className={open ? "overlay open" : "overlay"} onClick={onClose} aria-hidden="true" />
@@ -85,15 +107,60 @@ export function CartDrawer({
           )}
         </div>
 
-        <div className="drawer-foot">
+        <form className="drawer-foot checkout-form" onSubmit={submitCheckout}>
+          <div className="checkout-fields">
+            <label>
+              <span>Name</span>
+              <input
+                value={form.customerName}
+                autoComplete="name"
+                placeholder="Your name"
+                onChange={(event) => updateField("customerName", event.target.value)}
+              />
+            </label>
+            <label>
+              <span>Mobile number</span>
+              <div className="phone-field">
+                <strong>+91</strong>
+                <input
+                  value={form.phone10}
+                  inputMode="numeric"
+                  autoComplete="tel-national"
+                  maxLength={10}
+                  placeholder="10 digit number"
+                  onChange={(event) => updateField("phone10", event.target.value)}
+                />
+              </div>
+            </label>
+            <label>
+              <span>Address / area</span>
+              <textarea
+                value={form.address}
+                rows={3}
+                placeholder="Door number, street, area"
+                onChange={(event) => updateField("address", event.target.value)}
+              />
+            </label>
+            <label>
+              <span>Note <em>optional</em></span>
+              <input
+                value={form.note}
+                placeholder="Timing or delivery note"
+                onChange={(event) => updateField("note", event.target.value)}
+              />
+            </label>
+          </div>
           <div className="subtotal-row">
             <span>Subtotal</span>
             <span className="amount">{formatMoney(subtotal)}</span>
           </div>
-          <button className="checkout-btn" type="button" onClick={onCheckout}>
-            Checkout
+          <button className="checkout-btn" type="submit" disabled={cart.length === 0 || checkoutLoading}>
+            {checkoutLoading ? "Placing order..." : "Place order"}
           </button>
-        </div>
+          <p className="checkout-note">
+            No online payment. The shop will call you to confirm availability and payment.
+          </p>
+        </form>
       </aside>
     </>
   );

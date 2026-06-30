@@ -1,10 +1,15 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Eyal Chekku Oils - Cold Wood-Pressed Oils",
   description:
     "Mobile-first storefront for Eyal Chekku Oils, Chennai. Cold wood-pressed oils with preview cart ordering."
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1
 };
 
 export default function RootLayout({

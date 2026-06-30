@@ -922,7 +922,7 @@ footer ul a:hover {
   top: 0;
   right: 0;
   height: 100%;
-  width: min(420px, 92vw);
+  width: min(440px, 94vw);
   background: var(--cream-card);
   box-shadow: -20px 0 50px -20px rgba(0, 0, 0, 0.35);
   transform: translateX(100%);
@@ -1079,15 +1079,105 @@ footer ul a:hover {
 }
 
 .drawer-foot {
-  padding: 22px 24px 26px;
+  padding: 18px 24px 22px;
   border-top: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, rgba(250, 246, 237, 0.94), rgba(245, 239, 227, 1)),
+    var(--cream-card);
+  max-height: 54vh;
+  overflow-y: auto;
+}
+
+.checkout-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.checkout-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.checkout-fields label {
+  display: grid;
+  gap: 6px;
+}
+
+.checkout-fields label > span {
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.checkout-fields em {
+  color: rgba(43, 29, 18, 0.46);
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.checkout-fields input,
+.checkout-fields textarea,
+.phone-field {
+  width: 100%;
+  border: 1px solid rgba(166, 124, 46, 0.26);
+  border-radius: 14px;
+  background: rgba(255, 252, 245, 0.78);
+  color: var(--ink);
+  font: inherit;
+}
+
+.checkout-fields input,
+.checkout-fields textarea {
+  padding: 12px 13px;
+}
+
+.checkout-fields textarea {
+  resize: vertical;
+  min-height: 76px;
+}
+
+.phone-field {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.phone-field strong {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-right: 1px solid rgba(166, 124, 46, 0.22);
+  background: rgba(230, 214, 181, 0.44);
+  color: var(--leaf);
+  font-family: "Space Mono", ui-monospace, monospace;
+  font-size: 0.82rem;
+}
+
+.phone-field input {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.checkout-fields input:focus,
+.checkout-fields textarea:focus,
+.phone-field:focus-within {
+  border-color: rgba(27, 94, 63, 0.58);
+  box-shadow: 0 0 0 3px rgba(27, 94, 63, 0.1);
+  outline: none;
 }
 
 .subtotal-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 0;
 }
 
 .subtotal-row span:first-child {
@@ -1117,6 +1207,18 @@ footer ul a:hover {
   background: var(--brass-deep);
 }
 
+.checkout-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.checkout-note {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
 .toast {
   position: fixed;
   bottom: 26px;
@@ -1133,10 +1235,10 @@ footer ul a:hover {
   gap: 10px;
   opacity: 0;
   pointer-events: none;
+  z-index: 80;
   transition:
     opacity 0.3s ease,
     transform 0.3s ease;
-  z-index: 100;
   box-shadow: 0 14px 30px -10px rgba(0, 0, 0, 0.4);
   max-width: 90vw;
 }
@@ -1285,6 +1387,23 @@ footer ul a:hover {
   .foot-grid {
     grid-template-columns: 1fr;
     gap: 30px;
+  }
+
+  .drawer {
+    width: 100vw;
+  }
+
+  .drawer-head {
+    padding: 18px 20px;
+  }
+
+  .drawer-items {
+    padding: 6px 20px;
+  }
+
+  .drawer-foot {
+    padding: 16px 20px calc(18px + env(safe-area-inset-bottom));
+    max-height: 58vh;
   }
 }
 

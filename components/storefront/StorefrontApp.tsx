@@ -10,7 +10,7 @@ import { ProductGrid } from "./ProductGrid";
 import { SiteHeader } from "./SiteHeader";
 import { Toast } from "./Toast";
 import { TrustStrip } from "./TrustStrip";
-import type { CartItem } from "./types";
+import type { CartItem, CheckoutFormValues } from "./types";
 
 type StorefrontAppProps = {
   store: StorefrontStore;
@@ -20,6 +20,7 @@ export function StorefrontApp({ store }: StorefrontAppProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   const cartCount = useMemo(
     () => cart.reduce((sum, item) => sum + item.quantity, 0),
@@ -70,13 +71,56 @@ export function StorefrontApp({ store }: StorefrontAppProps) {
     setCart((current) => current.filter((item) => item.id !== id || item.label !== label));
   }
 
-  function checkoutPreview() {
+  async function submitCheckout(values: CheckoutFormValues) {
     if (cartCount === 0) {
       showToast("Your cart is empty.");
       return;
     }
 
-    showToast("Preview only - checkout is not connected yet.");
+    const items = cart.map((item) => ({
+      variantId: item.variantId,
+      quantity: item.quantity
+    }));
+
+    if (items.some((item) => !item.variantId)) {
+      showToast("Please refresh and add the item again.");
+      return;
+    }
+
+    setCheckoutLoading(true);
+
+    try {
+      const response = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          storeSlug: store.slug,
+          customer: values,
+          items,
+          phoneVerified: false
+        })
+      });
+
+      const payload = (await response.json()) as {
+        order?: { orderNumber: number; totalInr: number };
+        error?: string;
+      };
+
+      if (!response.ok) {
+        showToast(payload.error ?? "Order could not be placed.");
+        return;
+      }
+
+      setCart([]);
+      setDrawerOpen(false);
+      showToast(`Order #${payload.order?.orderNumber ?? ""} placed. We will call you soon.`);
+    } catch {
+      showToast("Order could not be placed. Please try again.");
+    } finally {
+      setCheckoutLoading(false);
+    }
   }
 
   return (
@@ -108,7 +152,8 @@ export function StorefrontApp({ store }: StorefrontAppProps) {
         onClose={() => setDrawerOpen(false)}
         onQuantityChange={changeQuantity}
         onRemove={removeItem}
-        onCheckout={checkoutPreview}
+        onCheckout={submitCheckout}
+        checkoutLoading={checkoutLoading}
       />
       <Toast message={toast} />
     </>

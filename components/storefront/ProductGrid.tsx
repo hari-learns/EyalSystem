@@ -99,6 +99,7 @@ export function ProductGrid({ products, categories, onAddToCart }: ProductGridPr
     onAddToCart(
       {
         id: product.id,
+        variantId: size.id,
         name: product.name,
         label: size.label,
         price: size.price,

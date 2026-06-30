@@ -319,6 +319,8 @@ Notes:
 
 ## 9. Wave 5 - Checkout And Order Creation
 
+Status: done.
+
 Goal: customer can place an order that is stored correctly.
 
 Build:
@@ -354,6 +356,16 @@ Commit gate:
 
 - Order creation tests pass.
 - Manual mobile checkout test passes.
+
+Implementation notes:
+
+- Checkout must submit variant IDs and quantities only.
+- Server must rebuild product names, prices, totals, and item snapshots from Supabase.
+- Customer phone is stored only as normalized `+91XXXXXXXXXX`.
+- The OTP hook lives in checkout validation through `stores.settings.requires_phone_verification`; it remains disabled for V1.
+- Short-term note: order and item writes are handled server-side with cleanup on item insert failure. Before meaningful traffic, move this into a Postgres RPC so order creation is fully atomic.
+- Verified with an API integration test for invalid phone rejection, valid order creation, and immutable item price snapshots after a live variant price change.
+- Verified the mobile checkout drawer at 390px width; the app now declares an explicit mobile viewport and the drawer uses full mobile width.
 
 ## 10. Wave 6 - Email Order Delivery
 
