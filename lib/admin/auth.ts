@@ -13,6 +13,7 @@ export type AdminUserContext = {
 };
 
 type UserClaims = {
+  id?: unknown;
   sub?: unknown;
   email?: unknown;
 };
@@ -28,7 +29,12 @@ export async function getAdminUserContext(
   ctx: { userClaims?: UserClaims | null },
   admin: SupabaseAdminClient
 ) {
-  const userId = typeof ctx.userClaims?.sub === "string" ? ctx.userClaims.sub : "";
+  const userId =
+    typeof ctx.userClaims?.id === "string"
+      ? ctx.userClaims.id
+      : typeof ctx.userClaims?.sub === "string"
+        ? ctx.userClaims.sub
+        : "";
   const email = typeof ctx.userClaims?.email === "string" ? ctx.userClaims.email.toLowerCase() : "";
 
   if (!userId) {
