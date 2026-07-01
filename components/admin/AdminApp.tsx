@@ -91,7 +91,11 @@ async function getBrowserClient() {
   return browserClient;
 }
 
-export function AdminApp() {
+type AdminAppProps = {
+  initialStoreSlug?: string;
+};
+
+export function AdminApp({ initialStoreSlug }: AdminAppProps) {
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [user, setUser] = useState<AdminUser | null>(null);
@@ -109,9 +113,10 @@ export function AdminApp() {
   const [loading, setLoading] = useState(false);
 
   const selectedStore = useMemo(
-    () => user?.stores.find((store) => store.slug === selectedStoreSlug) ?? user?.stores[0],
+    () => user?.stores.find((store) => store.slug === selectedStoreSlug) ?? null,
     [selectedStoreSlug, user]
   );
+  const isStoreLocked = Boolean(initialStoreSlug);
 
   useEffect(() => {
     getBrowserClient()
@@ -165,7 +170,7 @@ export function AdminApp() {
     if (!token) return;
     const payload = await api<{ user: AdminUser }>("/api/admin/me", token);
     setUser(payload.user);
-    setSelectedStoreSlug(payload.user.stores[0]?.slug ?? "");
+    setSelectedStoreSlug(initialStoreSlug ?? payload.user.stores[0]?.slug ?? "");
   }
 
   async function loadProducts() {
@@ -283,6 +288,25 @@ export function AdminApp() {
     );
   }
 
+  if (!selectedStore) {
+    return (
+      <main className="admin-shell">
+        <section className="admin-login">
+          <p className="eyebrow">Merchant Portal</p>
+          <h1>Store access denied</h1>
+          <p>
+            {initialStoreSlug
+              ? `Your login does not have access to ${initialStoreSlug}.`
+              : "Your login is not connected to a merchant store yet."}
+          </p>
+          <button type="button" onClick={logout}>
+            Sign out
+          </button>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="admin-shell">
       <header className="admin-header">
@@ -297,19 +321,26 @@ export function AdminApp() {
       </header>
 
       <section className="admin-toolbar">
-        <label>
-          Store
-          <select
-            value={selectedStore?.slug ?? ""}
-            onChange={(event) => setSelectedStoreSlug(event.target.value)}
-          >
-            {user.stores.map((store) => (
-              <option value={store.slug} key={store.id}>
-                {store.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {isStoreLocked ? (
+          <div>
+            <span className="eyebrow">Store</span>
+            <strong>{selectedStore.name}</strong>
+          </div>
+        ) : (
+          <label>
+            Store
+            <select
+              value={selectedStore.slug}
+              onChange={(event) => setSelectedStoreSlug(event.target.value)}
+            >
+              {user.stores.map((store) => (
+                <option value={store.slug} key={store.id}>
+                  {store.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <nav className="admin-tabs">
           <button type="button" aria-pressed={tab === "products"} onClick={() => setTab("products")}>
             Products

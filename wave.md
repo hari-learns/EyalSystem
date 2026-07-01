@@ -699,7 +699,66 @@ Deployment notes:
   - `/api/orders` accepted a smoke order and stored it; smoke order was deleted afterward
 - Vercel log scan showed the expected `checkout_email_failed` entry because Resend env is not configured yet.
 
-## 16. Later Waves - Not V1
+## 16. Wave 12 - Merchant Endpoints And Domain Hosting
+
+Status: **Implemented** in the current endpoint-routing commit; pending full merchant-login manual verification.
+
+Goal: move from developer-style routes to clean merchant-scoped public and admin endpoints on the platform domain.
+
+Build:
+
+- Add customer storefront route:
+  - `/merchants/:storeSlug`
+- Add merchant admin route:
+  - `/merchantadmin/:storeSlug`
+- Keep one storefront app and one merchant admin app; both must load store context from `:storeSlug`.
+- Redirect legacy routes:
+  - `/s/:storeSlug` redirects to `/merchants/:storeSlug`
+  - `/admin` remains platform/owner-only or redirects to a safer owner/admin landing later
+- Update QR generation so store QR codes point to `/merchants/:storeSlug`.
+- Update onboarding docs so every merchant gets two links:
+  - customer order link
+  - merchant management link
+- Configure Vercel production for `conyug.in`.
+- Configure GoDaddy DNS for `conyug.in` to point at the Vercel project.
+
+Acceptance:
+
+- `https://conyug.in/merchants/eyal-chekku-oils` renders Eyal storefront.
+- `https://conyug.in/merchantadmin/eyal-chekku-oils` renders Eyal admin in Eyal context.
+- A logged-in Eyal merchant cannot access another store admin slug.
+- QR code opens the new `/merchants/:storeSlug` URL.
+- Existing Vercel URL still works for testing.
+
+Commit gate:
+
+- Build and typecheck pass.
+- Smoke-test both Eyal and demo store on the new endpoint shape.
+- Verify legacy `/s/:storeSlug` does not break existing printed/test QR links during transition.
+- Confirm no merchant-facing flow depends on generic `/admin`.
+
+Manual verification needed:
+
+- In GoDaddy, confirm `conyug.in` DNS records point to Vercel exactly as Vercel requests.
+- In Vercel, confirm `conyug.in` is verified and assigned to production.
+- Open customer and admin URLs from mobile data, not only local Wi-Fi.
+- Scan a freshly generated Eyal QR code and confirm it opens `conyug.in/merchants/eyal-chekku-oils`.
+
+Notes:
+
+- This is not "one codebase per merchant"; it is one platform with clean merchant endpoints.
+- Do not build per-merchant domains yet. `conyug.in/merchants/:storeSlug` is the short-term scalable path.
+- Keep custom domains like `eyal.in` or merchant-owned domains in the later bucket until the platform domain flow is proven.
+- Implemented routes:
+  - `/merchants/:storeSlug`
+  - `/merchantadmin/:storeSlug`
+  - `/s/:storeSlug` redirects to `/merchants/:storeSlug`
+- Vercel domains added:
+  - `conyug.in`
+  - `www.conyug.in`
+- `NEXT_PUBLIC_SITE_URL` is set to `https://conyug.in` for QR generation.
+
+## 17. Later Waves - Not V1
 
 Do not build these until Eyal and at least one more store are live:
 

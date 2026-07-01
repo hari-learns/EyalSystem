@@ -11,7 +11,7 @@ type QrRouteProps = {
 export async function GET(request: Request, { params }: QrRouteProps) {
   const { storeSlug } = await params;
   const origin = getPublicOrigin(request);
-  const storeUrl = `${origin}/s/${storeSlug}`;
+  const storeUrl = `${origin}/merchants/${storeSlug}`;
   const svg = await QRCode.toString(storeUrl, {
     type: "svg",
     margin: 2,

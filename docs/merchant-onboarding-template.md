@@ -40,13 +40,13 @@ npm run merchant:setup -- \
 ```
 
 6. Set `commission_rules`.
-7. Verify `/s/:storeSlug`.
+7. Verify `/merchants/:storeSlug`.
 8. Verify `/api/stores/:storeSlug/qr`.
 9. Print the QR and test it from a phone.
 
 ## Manual Verification
 
-- Merchant can log into `/admin`.
+- Merchant can log into `/merchantadmin/:storeSlug`.
 - Merchant sees only their store.
 - Product description, price, and availability updates reflect on storefront.
 - Merchant can search orders by 10 digit Indian phone number.
@@ -57,7 +57,7 @@ npm run merchant:setup -- \
 A second demo store exists to prove storefront reuse and store isolation:
 
 ```txt
-/s/demo-organic-mart
+/merchants/demo-organic-mart
 ```
 
 Do not treat demo data as a real merchant. Use it for testing new onboarding and access-isolation changes.
@@ -67,7 +67,13 @@ Do not treat demo data as a real merchant. Use it for testing new onboarding and
 Current storefront route:
 
 ```txt
-/s/eyal-chekku-oils
+/merchants/eyal-chekku-oils
+```
+
+Current merchant admin route:
+
+```txt
+/merchantadmin/eyal-chekku-oils
 ```
 
 Current QR route:
