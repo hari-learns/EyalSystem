@@ -20,6 +20,7 @@ export type OrderEmailItem = {
   productName: string;
   variantLabel: string;
   priceInr: number;
+  rateDisplayMode?: "fixed" | "on_call";
   quantity: number;
   lineTotalInr: number;
 };
@@ -90,19 +91,25 @@ export async function sendMerchantOrderEmail({
 function renderOrderEmailHtml({ store, order, items }: SendOrderEmailInput) {
   const itemRows = items
     .map(
-      (item) => `
+      (item) => {
+        const amount =
+          item.rateDisplayMode === "on_call" ? "Rate on call" : formatMoney(item.lineTotalInr);
+
+        return `
         <tr>
           <td style="padding:10px 0;border-bottom:1px solid #eadfc9;">
             <strong>${escapeHtml(item.productName)}</strong><br />
             <span style="color:#6e6253;">${escapeHtml(item.variantLabel)} x ${item.quantity}</span>
           </td>
           <td style="padding:10px 0;border-bottom:1px solid #eadfc9;text-align:right;">
-            ${escapeHtml(formatMoney(item.lineTotalInr))}
+            ${escapeHtml(amount)}
           </td>
         </tr>
-      `
+      `;
+      }
     )
     .join("");
+  const hasOnCallItems = items.some((item) => item.rateDisplayMode === "on_call");
 
   return `
     <!doctype html>
@@ -135,9 +142,14 @@ function renderOrderEmailHtml({ store, order, items }: SendOrderEmailInput) {
             <h2 style="margin:24px 0 8px;font-size:18px;">Items</h2>
             <table style="width:100%;border-collapse:collapse;font-size:15px;">${itemRows}</table>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:22px;padding-top:18px;border-top:2px solid #2b1d12;">
-              <span style="font-size:16px;color:#6e6253;">Total</span>
+              <span style="font-size:16px;color:#6e6253;">${hasOnCallItems ? "Known subtotal" : "Total"}</span>
               <strong style="font-size:24px;">${escapeHtml(formatMoney(order.totalInr))}</strong>
             </div>
+            ${
+              hasOnCallItems
+                ? `<p style="margin:12px 0 0;color:#6e6253;">Some item rates are marked rate on call. Confirm final total with the customer before payment.</p>`
+                : ""
+            }
           </div>
         </div>
       </body>
@@ -148,12 +160,14 @@ function renderOrderEmailHtml({ store, order, items }: SendOrderEmailInput) {
 function renderOrderEmailText({ store, order, items }: SendOrderEmailInput) {
   const lines = items
     .map(
-      (item) =>
-        `- ${item.productName} (${item.variantLabel}) x ${item.quantity}: ${formatMoney(
-          item.lineTotalInr
-        )}`
+      (item) => {
+        const amount =
+          item.rateDisplayMode === "on_call" ? "Rate on call" : formatMoney(item.lineTotalInr);
+        return `- ${item.productName} (${item.variantLabel}) x ${item.quantity}: ${amount}`;
+      }
     )
     .join("\n");
+  const hasOnCallItems = items.some((item) => item.rateDisplayMode === "on_call");
 
   return [
     `New order for ${store.name} #${order.orderNumber}`,
@@ -165,7 +179,8 @@ function renderOrderEmailText({ store, order, items }: SendOrderEmailInput) {
     "Items:",
     lines,
     "",
-    `Total: ${formatMoney(order.totalInr)}`
+    `${hasOnCallItems ? "Known subtotal" : "Total"}: ${formatMoney(order.totalInr)}`,
+    hasOnCallItems ? "Some item rates are marked rate on call. Confirm final total before payment." : null
   ]
     .filter(Boolean)
     .join("\n");

@@ -12,6 +12,7 @@ type OrderPatch = {
 };
 
 const ORDER_STATUSES = new Set<OrderStatus>(["new", "contacted", "completed", "cancelled"]);
+const MERCHANT_STATUS_VALUES = new Set(["new", "delivered", "completed", "cancelled"]);
 
 export const GET = withSupabase({ auth: "user" }, async (request, ctx) => {
   const admin = ctx.supabaseAdmin as any;
@@ -28,35 +29,11 @@ export const GET = withSupabase({ auth: "user" }, async (request, ctx) => {
     return jsonError("Store access denied.", 403);
   }
 
-  const status = url.searchParams.get("status");
-  const search = normalizeSearch(url.searchParams.get("search") ?? "");
-  const dateFrom = url.searchParams.get("dateFrom");
-  const dateTo = url.searchParams.get("dateTo");
-
-  let query = admin
+  const { data: monthRows, error: monthsError } = await admin
     .from("orders")
     .select(
       `
-        id,
-        order_number,
-        customer_name,
-        customer_phone,
-        customer_address,
-        customer_note,
-        status,
-        email_status,
-        email_error,
-        total_inr,
-        item_count,
         placed_at,
-        order_items (
-          id,
-          product_name_snapshot,
-          variant_label_snapshot,
-          price_inr_snapshot,
-          quantity,
-          line_total_inr
-        ),
         stores!inner (
           slug
         )
@@ -64,17 +41,44 @@ export const GET = withSupabase({ auth: "user" }, async (request, ctx) => {
     )
     .eq("stores.slug", storeSlug)
     .order("placed_at", { ascending: false })
-    .limit(80);
+    .limit(500);
 
-  if (status && ORDER_STATUSES.has(status as OrderStatus)) {
-    query = query.eq("status", status);
+  if (monthsError) {
+    return jsonError("Could not load order months.", 500);
   }
 
-  if (dateFrom) {
+  const status = url.searchParams.get("status");
+  const search = normalizeSearch(url.searchParams.get("search") ?? "");
+  const month = url.searchParams.get("month") ?? "";
+  const format = url.searchParams.get("format") ?? "json";
+  const dateFrom = url.searchParams.get("dateFrom");
+  const dateTo = url.searchParams.get("dateTo");
+  const monthRange = month ? getMonthRange(month) : null;
+
+  if (month && !monthRange) {
+    return jsonError("Invalid order month.", 400);
+  }
+
+  let query = admin
+    .from("orders")
+    .select(getOrdersSelect(true))
+    .eq("stores.slug", storeSlug)
+    .order("placed_at", { ascending: false })
+    .limit(format === "csv" ? 500 : 80);
+
+  const dbStatus = status === "delivered" ? "completed" : status;
+
+  if (dbStatus && ORDER_STATUSES.has(dbStatus as OrderStatus)) {
+    query = query.eq("status", dbStatus);
+  }
+
+  if (monthRange) {
+    query = query.gte("placed_at", monthRange.start).lt("placed_at", monthRange.end);
+  } else if (dateFrom) {
     query = query.gte("placed_at", `${dateFrom}T00:00:00.000Z`);
   }
 
-  if (dateTo) {
+  if (!monthRange && dateTo) {
     query = query.lte("placed_at", `${dateTo}T23:59:59.999Z`);
   }
 
@@ -84,14 +88,46 @@ export const GET = withSupabase({ auth: "user" }, async (request, ctx) => {
       : query.ilike("customer_name", `%${search}%`);
   }
 
-  const { data, error: ordersError } = await query;
+  let { data, error: ordersError } = await query;
+
+  if (isMissingRateDisplayModeColumn(ordersError)) {
+    let fallbackQuery = admin
+      .from("orders")
+      .select(getOrdersSelect(false))
+      .eq("stores.slug", storeSlug)
+      .order("placed_at", { ascending: false })
+      .limit(format === "csv" ? 500 : 80);
+
+    if (dbStatus && ORDER_STATUSES.has(dbStatus as OrderStatus)) {
+      fallbackQuery = fallbackQuery.eq("status", dbStatus);
+    }
+
+    if (monthRange) {
+      fallbackQuery = fallbackQuery.gte("placed_at", monthRange.start).lt("placed_at", monthRange.end);
+    } else if (dateFrom) {
+      fallbackQuery = fallbackQuery.gte("placed_at", `${dateFrom}T00:00:00.000Z`);
+    }
+
+    if (!monthRange && dateTo) {
+      fallbackQuery = fallbackQuery.lte("placed_at", `${dateTo}T23:59:59.999Z`);
+    }
+
+    if (search) {
+      fallbackQuery = search.startsWith("+91")
+        ? fallbackQuery.eq("customer_phone", search)
+        : fallbackQuery.ilike("customer_name", `%${search}%`);
+    }
+
+    const fallback = await fallbackQuery;
+    data = fallback.data;
+    ordersError = fallback.error;
+  }
 
   if (ordersError) {
     return jsonError("Could not load orders.", 500);
   }
 
-  return Response.json({
-    orders: ((data ?? []) as any[]).map((order) => ({
+  const orders = ((data ?? []) as any[]).map((order) => ({
       id: order.id,
       orderNumber: order.order_number,
       customerName: order.customer_name,
@@ -109,10 +145,24 @@ export const GET = withSupabase({ auth: "user" }, async (request, ctx) => {
         productName: item.product_name_snapshot,
         variantLabel: item.variant_label_snapshot,
         priceInr: item.price_inr_snapshot,
+        rateDisplayMode: item.rate_display_mode ?? "fixed",
         quantity: item.quantity,
         lineTotalInr: item.line_total_inr
       }))
-    }))
+    }));
+
+  if (format === "csv") {
+    return new Response(renderOrdersCsv(orders), {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename=\"${storeSlug}-${month || "orders"}.csv\"`
+      }
+    });
+  }
+
+  return Response.json({
+    orders,
+    months: getOrderMonths((monthRows ?? []) as { placed_at: string }[])
   });
 });
 
@@ -134,9 +184,15 @@ export const PATCH = withSupabase({ auth: "user" }, async (request, ctx) => {
 
   const storeSlug = typeof body.storeSlug === "string" ? body.storeSlug.trim() : "";
   const orderId = typeof body.orderId === "string" ? body.orderId.trim() : "";
-  const status = typeof body.status === "string" ? body.status.trim() : "";
+  const requestedStatus = typeof body.status === "string" ? body.status.trim() : "";
+  const status = requestedStatus === "delivered" ? "completed" : requestedStatus;
 
-  if (!storeSlug || !orderId || !ORDER_STATUSES.has(status as OrderStatus)) {
+  if (
+    !storeSlug ||
+    !orderId ||
+    !MERCHANT_STATUS_VALUES.has(requestedStatus) ||
+    !ORDER_STATUSES.has(status as OrderStatus)
+  ) {
     return jsonError("Order update is incomplete.", 400);
   }
 
@@ -180,4 +236,93 @@ function normalizeSearch(value: string) {
   if (digits.length === 12 && digits.startsWith("91")) return `+${digits}`;
 
   return trimmed;
+}
+
+function getMonthRange(month: string) {
+  if (!/^\d{4}-\d{2}$/.test(month)) return null;
+
+  const start = new Date(`${month}-01T00:00:00.000Z`);
+  if (Number.isNaN(start.getTime())) return null;
+
+  const end = new Date(start);
+  end.setUTCMonth(end.getUTCMonth() + 1);
+
+  return {
+    start: start.toISOString(),
+    end: end.toISOString()
+  };
+}
+
+function getOrderMonths(orders: { placed_at: string }[]) {
+  return Array.from(new Set(orders.map((order) => order.placed_at.slice(0, 7)))).sort().reverse();
+}
+
+function renderOrdersCsv(orders: any[]) {
+  const rows = [
+    [
+      "Order",
+      "Placed At",
+      "Customer",
+      "Phone",
+      "Status",
+      "Known Total",
+      "Items"
+    ],
+    ...orders.map((order) => [
+      `#${order.orderNumber}`,
+      order.placedAt,
+      order.customerName,
+      order.customerPhone,
+      order.status === "completed" ? "delivered" : order.status,
+      String(order.totalInr),
+      order.items
+        .map((item: any) => {
+          const amount =
+            item.rateDisplayMode === "on_call" ? "Rate on call" : `Rs. ${item.lineTotalInr}`;
+          return `${item.productName} (${item.variantLabel}) x ${item.quantity} - ${amount}`;
+        })
+        .join("; ")
+    ])
+  ];
+
+  return rows.map((row) => row.map(escapeCsv).join(",")).join("\n");
+}
+
+function escapeCsv(value: string) {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function getOrdersSelect(includeRateDisplayMode: boolean) {
+  return `
+    id,
+    order_number,
+    customer_name,
+    customer_phone,
+    customer_address,
+    customer_note,
+    status,
+    email_status,
+    email_error,
+    total_inr,
+    item_count,
+    placed_at,
+    order_items (
+      id,
+      product_name_snapshot,
+      variant_label_snapshot,
+      price_inr_snapshot,
+      ${includeRateDisplayMode ? "rate_display_mode," : ""}
+      quantity,
+      line_total_inr
+    ),
+    stores!inner (
+      slug
+    )
+  `;
+}
+
+function isMissingRateDisplayModeColumn(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const message = "message" in error ? String((error as { message?: unknown }).message) : "";
+  return message.includes("rate_display_mode");
 }

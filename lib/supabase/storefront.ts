@@ -42,6 +42,7 @@ type ProductVariantRow = {
   label: string;
   unit_value: number;
   price_inr: number;
+  rate_display_mode: "fixed" | "on_call";
   availability_status: "available" | "unavailable";
   is_visible: boolean;
   display_order: number;
@@ -76,58 +77,82 @@ export async function getStorefrontStoreBySlug(slug: string) {
     return { data: null, error: new Error("Missing Supabase storefront env") };
   }
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("stores")
-    .select(
-      `
-        id,
-        slug,
-        name,
-        nav_brand,
-        location,
-        logo_path,
-        contact_numbers,
-        theme,
-        categories (
-          id,
-          slug,
-          name,
-          description,
-          display_order,
-          is_visible
-        ),
-        products (
-          id,
-          category_id,
-          sku,
-          name,
-          short_name,
-          description,
-          image_path,
-          availability_status,
-          is_visible,
-          display_order,
-          product_variants (
-            id,
-            label,
-            unit_value,
-            price_inr,
-            availability_status,
-            is_visible,
-            display_order
-          )
-        )
-      `
-    )
+    .select(getStorefrontSelect(true))
     .eq("slug", slug)
     .eq("status", "active")
     .single<StoreRow>();
+
+  if (isMissingRateDisplayModeColumn(error)) {
+    const fallback = await supabase
+      .from("stores")
+      .select(getStorefrontSelect(false))
+      .eq("slug", slug)
+      .eq("status", "active")
+      .single<StoreRow>();
+    data = fallback.data;
+    error = fallback.error;
+  }
 
   if (error) {
     return { data: null, error };
   }
 
+  if (!data) {
+    return { data: null, error: new Error("Store not found.") };
+  }
+
   return { data: mapStoreRow(data), error: null };
+}
+
+function getStorefrontSelect(includeRateDisplayMode: boolean) {
+  return `
+    id,
+    slug,
+    name,
+    nav_brand,
+    location,
+    logo_path,
+    contact_numbers,
+    theme,
+    categories (
+      id,
+      slug,
+      name,
+      description,
+      display_order,
+      is_visible
+    ),
+    products (
+      id,
+      category_id,
+      sku,
+      name,
+      short_name,
+      description,
+      image_path,
+      availability_status,
+      is_visible,
+      display_order,
+      product_variants (
+        id,
+        label,
+        unit_value,
+        price_inr,
+        ${includeRateDisplayMode ? "rate_display_mode," : ""}
+        availability_status,
+        is_visible,
+        display_order
+      )
+    )
+  `;
+}
+
+function isMissingRateDisplayModeColumn(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const message = "message" in error ? String((error as { message?: unknown }).message) : "";
+  return message.includes("rate_display_mode");
 }
 
 function mapStoreRow(row: StoreRow): StorefrontStore {
@@ -157,6 +182,7 @@ function mapStoreRow(row: StoreRow): StorefrontStore {
           label: variant.label,
           ml: variant.unit_value,
           price: variant.price_inr,
+          rateDisplayMode: variant.rate_display_mode ?? "fixed",
           availabilityStatus: variant.availability_status
         }));
 

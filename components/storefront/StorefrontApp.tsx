@@ -28,7 +28,16 @@ export function StorefrontApp({ store }: StorefrontAppProps) {
   );
 
   const subtotal = useMemo(
-    () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0),
+    () =>
+      cart.reduce(
+        (sum, item) =>
+          item.rateDisplayMode === "on_call" ? sum : sum + item.price * item.quantity,
+        0
+      ),
+    [cart]
+  );
+  const hasOnCallItems = useMemo(
+    () => cart.some((item) => item.rateDisplayMode === "on_call"),
     [cart]
   );
 
@@ -149,6 +158,7 @@ export function StorefrontApp({ store }: StorefrontAppProps) {
         cart={cart}
         open={drawerOpen}
         subtotal={subtotal}
+        hasOnCallItems={hasOnCallItems}
         onClose={() => setDrawerOpen(false)}
         onQuantityChange={changeQuantity}
         onRemove={removeItem}

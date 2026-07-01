@@ -4,6 +4,7 @@ export type CartItem = {
   name: string;
   label: string;
   price: number;
+  rateDisplayMode?: "fixed" | "on_call";
   image: string;
   quantity: number;
 };

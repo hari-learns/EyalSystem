@@ -9,6 +9,7 @@ type AdminStore = {
   slug: string;
   name: string;
   role: string;
+  merchantOrderEmail: string | null;
 };
 
 type AdminUser = {
@@ -17,17 +18,27 @@ type AdminUser = {
   stores: AdminStore[];
 };
 
+type AdminEmailConfig = {
+  fallbackConfigured: boolean;
+  fromConfigured: boolean;
+};
+
 type ProductVariantAdmin = {
   id: string;
   label: string;
   unitValue: number;
   priceInr: number;
+  rateDisplayMode: "fixed" | "on_call";
   availabilityStatus: "available" | "unavailable";
 };
 
 type ProductAdmin = {
   id: string;
   name: string;
+  shortName: string;
+  categorySlug: string;
+  categoryName: string;
+  imagePath: string | null;
   description: string;
   availabilityStatus: "available" | "unavailable";
   variants: ProductVariantAdmin[];
@@ -50,26 +61,19 @@ type OrderAdmin = {
     id: string;
     productName: string;
     variantLabel: string;
+    priceInr: number;
+    rateDisplayMode: "fixed" | "on_call";
     quantity: number;
     lineTotalInr: number;
   }[];
 };
 
-type OwnerReport = {
-  month: string;
-  stores: {
-    id: string;
-    slug: string;
-    name: string;
-    submittedOrders: number;
-    completedOrders: number;
-    cancelledOrders: number;
-    completedValueInr: number;
-    commissionDueInr: number;
-  }[];
+type OrdersResponse = {
+  orders: OrderAdmin[];
+  months: string[];
 };
 
-type Tab = "products" | "orders" | "owner";
+type Tab = "products" | "orders" | "store";
 
 let browserClient: SupabaseClient | null = null;
 
@@ -99,16 +103,21 @@ export function AdminApp({ initialStoreSlug }: AdminAppProps) {
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [user, setUser] = useState<AdminUser | null>(null);
+  const [emailConfig, setEmailConfig] = useState<AdminEmailConfig | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [selectedStoreSlug, setSelectedStoreSlug] = useState("");
   const [tab, setTab] = useState<Tab>("products");
   const [products, setProducts] = useState<ProductAdmin[]>([]);
+  const [savedProducts, setSavedProducts] = useState<ProductAdmin[]>([]);
+  const [productSearch, setProductSearch] = useState("");
+  const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
   const [orders, setOrders] = useState<OrderAdmin[]>([]);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [orderMonths, setOrderMonths] = useState<string[]>([]);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderStatus, setOrderStatus] = useState("");
   const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7));
-  const [report, setReport] = useState<OwnerReport | null>(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -117,6 +126,44 @@ export function AdminApp({ initialStoreSlug }: AdminAppProps) {
     [selectedStoreSlug, user]
   );
   const isStoreLocked = Boolean(initialStoreSlug);
+  const dirtyProductIds = useMemo(() => {
+    const savedById = new Map(savedProducts.map((product) => [product.id, product]));
+    return new Set(
+      products
+        .filter((product) => JSON.stringify(product) !== JSON.stringify(savedById.get(product.id)))
+        .map((product) => product.id)
+    );
+  }, [products, savedProducts]);
+  const hasDirtyProducts = dirtyProductIds.size > 0;
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const visibleOrderMonths = orderMonths.length > 0 ? orderMonths : [currentMonth];
+  const normalizedProductSearch = productSearch.trim().toLowerCase();
+  const filteredProducts = useMemo(() => {
+    if (!normalizedProductSearch) return products;
+
+    return products.filter((product) =>
+      [
+        product.name,
+        product.shortName,
+        product.categoryName,
+        product.description,
+        ...product.variants.map((variant) => variant.label)
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedProductSearch)
+    );
+  }, [normalizedProductSearch, products]);
+  const productsByCategory = useMemo(() => {
+    const grouped = new Map<string, ProductAdmin[]>();
+
+    for (const product of filteredProducts) {
+      const key = product.categoryName || "Uncategorized";
+      grouped.set(key, [...(grouped.get(key) ?? []), product]);
+    }
+
+    return Array.from(grouped.entries());
+  }, [filteredProducts]);
 
   useEffect(() => {
     getBrowserClient()
@@ -137,8 +184,20 @@ export function AdminApp({ initialStoreSlug }: AdminAppProps) {
     if (!accessToken || !selectedStore?.slug) return;
     if (tab === "products") void loadProducts();
     if (tab === "orders") void loadOrders();
-    if (tab === "owner" && user?.isOwner) void loadOwnerReport();
-  }, [accessToken, selectedStore?.slug, tab]);
+    if (tab === "store") void loadOrders();
+  }, [accessToken, selectedStore?.slug, tab, reportMonth]);
+
+  useEffect(() => {
+    if (!hasDirtyProducts) return;
+
+    function warnBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [hasDirtyProducts]);
 
   async function login() {
     if (!supabase) return;
@@ -159,17 +218,23 @@ export function AdminApp({ initialStoreSlug }: AdminAppProps) {
   }
 
   async function logout() {
+    if (hasDirtyProducts && !window.confirm("Unsaved product changes will be lost if you sign out.")) {
+      return;
+    }
+
     await supabase?.auth.signOut();
     setAccessToken(null);
     setUser(null);
     setProducts([]);
+    setSavedProducts([]);
     setOrders([]);
   }
 
   async function loadMe(token = accessToken) {
     if (!token) return;
-    const payload = await api<{ user: AdminUser }>("/api/admin/me", token);
+    const payload = await api<{ user: AdminUser; email: AdminEmailConfig }>("/api/admin/me", token);
     setUser(payload.user);
+    setEmailConfig(payload.email);
     setSelectedStoreSlug(initialStoreSlug ?? payload.user.stores[0]?.slug ?? "");
   }
 
@@ -180,6 +245,7 @@ export function AdminApp({ initialStoreSlug }: AdminAppProps) {
       accessToken
     );
     setProducts(payload.products);
+    setSavedProducts(payload.products);
   }
 
   async function saveProduct(product: ProductAdmin) {
@@ -193,6 +259,7 @@ export function AdminApp({ initialStoreSlug }: AdminAppProps) {
         body: JSON.stringify({
           storeSlug: selectedStore.slug,
           productId: product.id,
+          name: product.name,
           description: product.description,
           availabilityStatus: product.availabilityStatus,
           variants: product.variants
@@ -206,18 +273,19 @@ export function AdminApp({ initialStoreSlug }: AdminAppProps) {
 
   async function loadOrders() {
     if (!accessToken || !selectedStore) return;
-    const params = new URLSearchParams({ storeSlug: selectedStore.slug });
+    const params = new URLSearchParams({ storeSlug: selectedStore.slug, month: reportMonth });
     if (orderSearch.trim()) params.set("search", orderSearch.trim());
     if (orderStatus) params.set("status", orderStatus);
 
-    const payload = await api<{ orders: OrderAdmin[] }>(
+    const payload = await api<OrdersResponse>(
       `/api/admin/orders?${params.toString()}`,
       accessToken
     );
     setOrders(payload.orders);
+    setOrderMonths(payload.months.length > 0 ? payload.months : [reportMonth]);
   }
 
-  async function updateOrderStatus(orderId: string, status: OrderAdmin["status"]) {
+  async function updateOrderStatus(orderId: string, status: "new" | "delivered" | "cancelled") {
     if (!accessToken || !selectedStore) return;
     await api("/api/admin/orders", accessToken, {
       method: "PATCH",
@@ -227,19 +295,82 @@ export function AdminApp({ initialStoreSlug }: AdminAppProps) {
     await loadOrders();
   }
 
-  async function loadOwnerReport() {
-    if (!accessToken) return;
-    const payload = await api<OwnerReport>(
-      `/api/owner/report?month=${encodeURIComponent(reportMonth)}`,
-      accessToken
-    );
-    setReport(payload);
+  async function downloadMonthlyOrders() {
+    if (!accessToken || !selectedStore) return;
+    const params = new URLSearchParams({
+      storeSlug: selectedStore.slug,
+      month: reportMonth,
+      format: "csv"
+    });
+    if (orderStatus) params.set("status", orderStatus);
+
+    const response = await fetch(`/api/admin/orders?${params.toString()}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    });
+
+    if (!response.ok) {
+      setMessage("Monthly report could not be downloaded.");
+      return;
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${selectedStore.slug}-${reportMonth}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   function updateProduct(productId: string, update: Partial<ProductAdmin>) {
     setProducts((current) =>
       current.map((product) => (product.id === productId ? { ...product, ...update } : product))
     );
+  }
+
+  function expandProduct(productId: string) {
+    if (expandedProductId && dirtyProductIds.has(expandedProductId)) {
+      const confirmed = window.confirm("Unsaved product changes will be lost if you close this editor.");
+      if (!confirmed) return;
+      const saved = savedProducts.find((product) => product.id === expandedProductId);
+      if (saved) {
+        setProducts((current) =>
+          current.map((product) => (product.id === saved.id ? saved : product))
+        );
+      }
+    }
+
+    setExpandedProductId((current) => (current === productId ? null : productId));
+  }
+
+  function changeTab(nextTab: Tab) {
+    if (nextTab === tab) return;
+
+    if (hasDirtyProducts) {
+      const confirmed = window.confirm("Unsaved product changes will be lost if you leave Products.");
+      if (!confirmed) return;
+      setProducts(savedProducts);
+      setExpandedProductId(null);
+    }
+
+    setTab(nextTab);
+  }
+
+  function changeStore(nextStoreSlug: string) {
+    if (nextStoreSlug === selectedStoreSlug) return;
+
+    if (hasDirtyProducts) {
+      const confirmed = window.confirm("Unsaved product changes will be lost if you switch stores.");
+      if (!confirmed) return;
+      setProducts(savedProducts);
+      setExpandedProductId(null);
+    }
+
+    setSelectedStoreSlug(nextStoreSlug);
   }
 
   function updateVariant(
@@ -331,7 +462,7 @@ export function AdminApp({ initialStoreSlug }: AdminAppProps) {
             Store
             <select
               value={selectedStore.slug}
-              onChange={(event) => setSelectedStoreSlug(event.target.value)}
+              onChange={(event) => changeStore(event.target.value)}
             >
               {user.stores.map((store) => (
                 <option value={store.slug} key={store.id}>
@@ -342,88 +473,159 @@ export function AdminApp({ initialStoreSlug }: AdminAppProps) {
           </label>
         )}
         <nav className="admin-tabs">
-          <button type="button" aria-pressed={tab === "products"} onClick={() => setTab("products")}>
+          <button type="button" aria-pressed={tab === "products"} onClick={() => changeTab("products")}>
             Products
           </button>
-          <button type="button" aria-pressed={tab === "orders"} onClick={() => setTab("orders")}>
+          <button type="button" aria-pressed={tab === "orders"} onClick={() => changeTab("orders")}>
             Orders
           </button>
-          {user.isOwner ? (
-            <button type="button" aria-pressed={tab === "owner"} onClick={() => setTab("owner")}>
-              Owner
-            </button>
-          ) : null}
+          <button type="button" aria-pressed={tab === "store"} onClick={() => changeTab("store")}>
+            Store
+          </button>
         </nav>
       </section>
 
       {message ? <p className="admin-message">{message}</p> : null}
 
       {tab === "products" ? (
-        <section className="admin-grid">
-          {products.map((product) => (
-            <article className="admin-card" key={product.id}>
-              <div className="admin-card-head">
-                <h2>{product.name}</h2>
-                <select
-                  value={product.availabilityStatus}
-                  onChange={(event) =>
-                    updateProduct(product.id, {
-                      availabilityStatus: event.target.value as ProductAdmin["availabilityStatus"]
-                    })
-                  }
-                >
-                  <option value="available">Available</option>
-                  <option value="unavailable">Unavailable</option>
-                </select>
-              </div>
-              <label>
-                Description
-                <textarea
-                  value={product.description}
-                  rows={3}
-                  onChange={(event) => updateProduct(product.id, { description: event.target.value })}
-                />
-              </label>
-              <div className="variant-list">
-                {product.variants.map((variant) => (
-                  <div className="variant-row" key={variant.id}>
-                    <strong>{variant.label}</strong>
-                    <input
-                      type="number"
-                      min={0}
-                      value={variant.priceInr}
-                      onChange={(event) =>
-                        updateVariant(product.id, variant.id, {
-                          priceInr: Number(event.target.value)
-                        })
-                      }
-                    />
-                    <select
-                      value={variant.availabilityStatus}
-                      onChange={(event) =>
-                        updateVariant(product.id, variant.id, {
-                          availabilityStatus: event.target
-                            .value as ProductVariantAdmin["availabilityStatus"]
-                        })
-                      }
-                    >
-                      <option value="available">Available</option>
-                      <option value="unavailable">Unavailable</option>
-                    </select>
-                  </div>
-                ))}
-              </div>
-              <button type="button" onClick={() => saveProduct(product)} disabled={loading}>
-                Save product
-              </button>
-            </article>
-          ))}
+        <section className="admin-panel">
+          <div className="admin-list-tools">
+            <label>
+              Search products
+              <input
+                type="search"
+                value={productSearch}
+                placeholder="Search product, category, or size"
+                onChange={(event) => setProductSearch(event.target.value)}
+              />
+            </label>
+            <p>{filteredProducts.length} products</p>
+          </div>
+
+          <div className="product-admin-list">
+            {productsByCategory.map(([categoryName, categoryProducts]) => (
+              <section className="admin-category-group" key={categoryName}>
+                <h2>{categoryName}</h2>
+                {categoryProducts.map((product) => {
+                  const expanded = expandedProductId === product.id;
+                  const dirty = dirtyProductIds.has(product.id);
+
+                  return (
+                    <article className={dirty ? "product-admin-row dirty" : "product-admin-row"} key={product.id}>
+                      <button
+                        className="product-row-summary"
+                        type="button"
+                        onClick={() => expandProduct(product.id)}
+                        aria-expanded={expanded}
+                      >
+                        <img src={product.imagePath ?? "/images/coconut.jpg"} alt="" />
+                        <span>
+                          <strong>{product.name}</strong>
+                          <small>{summarizeProductRates(product)}</small>
+                        </span>
+                        <em className={product.availabilityStatus}>{product.availabilityStatus}</em>
+                      </button>
+
+                      {expanded ? (
+                        <div className="product-editor">
+                          <label>
+                            Product name
+                            <input
+                              value={product.name}
+                              onChange={(event) => updateProduct(product.id, { name: event.target.value })}
+                            />
+                          </label>
+                          <label>
+                            Description
+                            <textarea
+                              value={product.description}
+                              rows={3}
+                              onChange={(event) =>
+                                updateProduct(product.id, { description: event.target.value })
+                              }
+                            />
+                          </label>
+                          <label>
+                            Product status
+                            <select
+                              value={product.availabilityStatus}
+                              onChange={(event) =>
+                                updateProduct(product.id, {
+                                  availabilityStatus: event.target.value as ProductAdmin["availabilityStatus"]
+                                })
+                              }
+                            >
+                              <option value="available">Available</option>
+                              <option value="unavailable">Unavailable</option>
+                            </select>
+                          </label>
+                          <div className="variant-list">
+                            {product.variants.map((variant) => (
+                              <div className="variant-row" key={variant.id}>
+                                <strong>{variant.label}</strong>
+                                <select
+                                  value={variant.rateDisplayMode}
+                                  onChange={(event) =>
+                                    updateVariant(product.id, variant.id, {
+                                      rateDisplayMode: event.target.value as ProductVariantAdmin["rateDisplayMode"]
+                                    })
+                                  }
+                                >
+                                  <option value="fixed">Fixed rate</option>
+                                  <option value="on_call">Rate on call</option>
+                                </select>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={variant.priceInr}
+                                  aria-label={`${variant.label} rate`}
+                                  onChange={(event) =>
+                                    updateVariant(product.id, variant.id, {
+                                      priceInr: Number(event.target.value)
+                                    })
+                                  }
+                                />
+                                <select
+                                  value={variant.availabilityStatus}
+                                  onChange={(event) =>
+                                    updateVariant(product.id, variant.id, {
+                                      availabilityStatus: event.target
+                                        .value as ProductVariantAdmin["availabilityStatus"]
+                                    })
+                                  }
+                                >
+                                  <option value="available">Available</option>
+                                  <option value="unavailable">Unavailable</option>
+                                </select>
+                              </div>
+                            ))}
+                          </div>
+                          {dirty ? (
+                            <button type="button" onClick={() => saveProduct(product)} disabled={loading}>
+                              {loading ? "Saving..." : "Save changes"}
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </article>
+                  );
+                })}
+              </section>
+            ))}
+          </div>
         </section>
       ) : null}
 
       {tab === "orders" ? (
         <section className="admin-panel">
           <div className="order-filters">
+            <select value={reportMonth} onChange={(event) => setReportMonth(event.target.value)}>
+              {visibleOrderMonths.map((month) => (
+                <option value={month} key={month}>
+                  {formatMonth(month)}
+                </option>
+              ))}
+            </select>
             <input
               value={orderSearch}
               placeholder="Search name or 10 digit phone"
@@ -432,69 +634,84 @@ export function AdminApp({ initialStoreSlug }: AdminAppProps) {
             <select value={orderStatus} onChange={(event) => setOrderStatus(event.target.value)}>
               <option value="">All statuses</option>
               <option value="new">New</option>
-              <option value="contacted">Contacted</option>
-              <option value="completed">Completed</option>
+              <option value="delivered">Delivered</option>
               <option value="cancelled">Cancelled</option>
             </select>
             <button type="button" onClick={loadOrders}>
               Search
             </button>
+            <button type="button" onClick={downloadMonthlyOrders}>
+              Download CSV
+            </button>
           </div>
           <div className="order-list">
-            {orders.map((order) => (
-              <article className={`order-card ${order.status}`} key={order.id}>
-                <div className="admin-card-head">
-                  <div>
-                    <h2>#{order.orderNumber} {order.customerName}</h2>
-                    <p>{order.customerPhone} · {new Date(order.placedAt).toLocaleString()}</p>
-                  </div>
-                  <strong>{formatMoney(order.totalInr)}</strong>
-                </div>
-                <p>{order.customerAddress}</p>
-                {order.customerNote ? <p>Note: {order.customerNote}</p> : null}
-                <ul>
-                  {order.items.map((item) => (
-                    <li key={item.id}>
-                      {item.productName} ({item.variantLabel}) x {item.quantity} -{" "}
-                      {formatMoney(item.lineTotalInr)}
-                    </li>
-                  ))}
-                </ul>
-                <div className="order-actions">
-                  <select
-                    value={order.status}
-                    onChange={(event) =>
-                      updateOrderStatus(order.id, event.target.value as OrderAdmin["status"])
-                    }
+            {orders.map((order) => {
+              const expanded = expandedOrderId === order.id;
+              const statusLabel = getMerchantOrderStatus(order.status);
+
+              return (
+                <article className={`order-card ${statusLabel}`} key={order.id}>
+                  <button
+                    className="order-row-summary"
+                    type="button"
+                    onClick={() => setExpandedOrderId((current) => (current === order.id ? null : order.id))}
+                    aria-expanded={expanded}
                   >
-                    <option value="new">New</option>
-                    <option value="contacted">Contacted</option>
-                    <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                  <span>Email: {order.emailStatus}</span>
-                </div>
-              </article>
-            ))}
+                    <span>
+                      <strong>#{order.orderNumber} {order.customerName}</strong>
+                      <small>{order.customerPhone} · {new Date(order.placedAt).toLocaleString()}</small>
+                    </span>
+                    <span>{formatMoney(order.totalInr)}</span>
+                    <em>{statusLabel}</em>
+                  </button>
+
+                  {expanded ? (
+                    <div className="order-detail">
+                      <p>{order.customerAddress}</p>
+                      {order.customerNote ? <p>Note: {order.customerNote}</p> : null}
+                      <ul>
+                        {order.items.map((item) => (
+                          <li key={item.id}>
+                            {item.productName} ({item.variantLabel}) x {item.quantity} -{" "}
+                            {item.rateDisplayMode === "on_call"
+                              ? "Rate on call"
+                              : formatMoney(item.lineTotalInr)}
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="order-actions">
+                        <select
+                          value={statusLabel}
+                          onChange={(event) =>
+                            updateOrderStatus(
+                              order.id,
+                              event.target.value as "new" | "delivered" | "cancelled"
+                            )
+                          }
+                        >
+                          <option value="new">New</option>
+                          <option value="delivered">Delivered</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+                        <span>
+                          Email: {order.emailStatus}
+                          {order.emailError ? ` - ${order.emailError}` : ""}
+                        </span>
+                      </div>
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })}
           </div>
         </section>
       ) : null}
 
-      {tab === "owner" && user.isOwner ? (
+      {tab === "store" ? (
         <section className="admin-panel">
-          <div className="order-filters">
-            <input
-              type="month"
-              value={reportMonth}
-              onChange={(event) => setReportMonth(event.target.value)}
-            />
-            <button type="button" onClick={loadOwnerReport}>
-              Load report
-            </button>
-          </div>
           <div className="qr-panel">
             <h2>Store QR</h2>
-            <p>Use this for shop posters after deployment URL is final.</p>
+            <p>Use this QR for shop posters and counter displays.</p>
             {selectedStore ? (
               <img
                 src={`/api/stores/${selectedStore.slug}/qr`}
@@ -504,17 +721,36 @@ export function AdminApp({ initialStoreSlug }: AdminAppProps) {
               />
             ) : null}
           </div>
-          <div className="report-table">
-            {(report?.stores ?? []).map((store) => (
-              <article className="admin-card" key={store.id}>
-                <h2>{store.name}</h2>
-                <p>Submitted: {store.submittedOrders}</p>
-                <p>Completed: {store.completedOrders}</p>
-                <p>Cancelled: {store.cancelledOrders}</p>
-                <p>Completed value: {formatMoney(store.completedValueInr)}</p>
-                <p>Commission due: {formatMoney(store.commissionDueInr)}</p>
-              </article>
-            ))}
+          <div className="store-info-grid">
+            <article className="admin-card">
+              <h2>Email delivery</h2>
+              {selectedStore.merchantOrderEmail ? (
+                <p>Orders are sent to {selectedStore.merchantOrderEmail}.</p>
+              ) : (
+                <p>
+                  Merchant email is not set. Orders are using the platform fallback email.
+                  Configure a verified Resend domain before using a real merchant inbox.
+                </p>
+              )}
+              <p>Fallback configured: {emailConfig?.fallbackConfigured ? "Yes" : "No"}</p>
+              <p>Sender configured: {emailConfig?.fromConfigured ? "Yes" : "No"}</p>
+            </article>
+            <article className="admin-card">
+              <h2>Monthly orders</h2>
+              <label>
+                Month
+                <select value={reportMonth} onChange={(event) => setReportMonth(event.target.value)}>
+                  {visibleOrderMonths.map((month) => (
+                    <option value={month} key={month}>
+                      {formatMonth(month)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" onClick={downloadMonthlyOrders}>
+                Download monthly CSV
+              </button>
+            </article>
           </div>
         </section>
       ) : null}
@@ -538,4 +774,30 @@ async function api<T>(url: string, token: string, init: RequestInit = {}) {
   }
 
   return payload;
+}
+
+function summarizeProductRates(product: ProductAdmin) {
+  return product.variants
+    .map((variant) =>
+      variant.rateDisplayMode === "on_call"
+        ? `${variant.label} Rate on call`
+        : `${variant.label} ${formatMoney(variant.priceInr)}`
+    )
+    .join(" · ");
+}
+
+function formatMonth(month: string) {
+  if (!/^\d{4}-\d{2}$/.test(month)) return month;
+
+  return new Intl.DateTimeFormat("en-IN", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC"
+  }).format(new Date(`${month}-01T00:00:00.000Z`));
+}
+
+function getMerchantOrderStatus(status: OrderAdmin["status"]) {
+  if (status === "completed") return "delivered";
+  if (status === "contacted") return "new";
+  return status;
 }

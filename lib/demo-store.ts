@@ -3,6 +3,7 @@ export type ProductVariant = {
   label: string;
   ml: number;
   price: number;
+  rateDisplayMode?: "fixed" | "on_call";
   availabilityStatus?: "available" | "unavailable";
 };
 

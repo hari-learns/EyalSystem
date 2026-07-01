@@ -103,6 +103,7 @@ export function ProductGrid({ products, categories, onAddToCart }: ProductGridPr
         name: product.name,
         label: size.label,
         price: size.price,
+        rateDisplayMode: size.rateDisplayMode ?? "fixed",
         image: product.image,
         quantity: 1
       },

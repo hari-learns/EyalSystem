@@ -24,13 +24,15 @@ type CheckoutPayload = {
 type StoreRow = {
   id: string;
   name: string;
-  merchant_order_email: string | null;
+  merchantOrderEmail?: string | null;
+  merchant_order_email?: string | null;
 };
 
 type OrderRpcItem = {
   productName: string;
   variantLabel: string;
   priceInr: number;
+  rateDisplayMode: "fixed" | "on_call";
   quantity: number;
   lineTotalInr: number;
 };
@@ -125,7 +127,7 @@ async function finishOrder(admin: any, storeSlug: string, created: OrderRpcResul
   const emailResult = await sendMerchantOrderEmail({
     store: {
       name: created.store.name,
-      merchantOrderEmail: created.store.merchant_order_email
+      merchantOrderEmail: created.store.merchantOrderEmail ?? created.store.merchant_order_email ?? null
     },
     order: {
       id: created.order.id,
@@ -140,6 +142,7 @@ async function finishOrder(admin: any, storeSlug: string, created: OrderRpcResul
       productName: item.productName,
       variantLabel: item.variantLabel,
       priceInr: item.priceInr,
+      rateDisplayMode: item.rateDisplayMode ?? "fixed",
       quantity: item.quantity,
       lineTotalInr: item.lineTotalInr
     }))

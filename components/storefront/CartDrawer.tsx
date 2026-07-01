@@ -9,6 +9,7 @@ type CartDrawerProps = {
   cart: CartItem[];
   open: boolean;
   subtotal: number;
+  hasOnCallItems: boolean;
   onClose: () => void;
   onQuantityChange: (id: string, label: string, delta: number) => void;
   onRemove: (id: string, label: string) => void;
@@ -20,6 +21,7 @@ export function CartDrawer({
   cart,
   open,
   subtotal,
+  hasOnCallItems,
   onClose,
   onQuantityChange,
   onRemove,
@@ -92,7 +94,11 @@ export function CartDrawer({
                         <Plus aria-hidden="true" size={12} strokeWidth={1.8} />
                       </button>
                     </div>
-                    <span className="ci-price">{formatMoney(item.price * item.quantity)}</span>
+                    <span className="ci-price">
+                      {item.rateDisplayMode === "on_call"
+                        ? "Rate on call"
+                        : formatMoney(item.price * item.quantity)}
+                    </span>
                   </div>
                 </div>
                 <button
@@ -161,9 +167,14 @@ export function CartDrawer({
             </label>
           </div>
           <div className="subtotal-row">
-            <span>Subtotal</span>
+            <span>{hasOnCallItems ? "Known subtotal" : "Subtotal"}</span>
             <span className="amount">{formatMoney(subtotal)}</span>
           </div>
+          {hasOnCallItems ? (
+            <p className="checkout-note">
+              Some rates will be confirmed by the shop on call before final payment.
+            </p>
+          ) : null}
           <button className="checkout-btn" type="submit" disabled={cart.length === 0 || checkoutLoading}>
             {checkoutLoading ? "Placing order..." : "Place order"}
           </button>

@@ -24,6 +24,7 @@ export function ProductCard({
   const selectedVariantAvailable =
     (selectedVariant?.availabilityStatus ?? "available") === "available";
   const canAdd = productAvailable && selectedVariantAvailable && Boolean(selectedVariant);
+  const isOnCall = selectedVariant?.rateDisplayMode === "on_call";
 
   return (
     <article
@@ -57,12 +58,19 @@ export function ProductCard({
         <div className="price-row">
           <div className="price-main">
             {selectedVariant ? (
-              <>
-                <span className="amount">{formatMoney(selectedVariant.price)}</span>
-                <span className="per">
-                  = {formatPer100Ml(selectedVariant.price, selectedVariant.ml)}
-                </span>
-              </>
+              isOnCall ? (
+                <>
+                  <span className="amount">Rate on call</span>
+                  <span className="per">final price confirmed by shop</span>
+                </>
+              ) : (
+                <>
+                  <span className="amount">{formatMoney(selectedVariant.price)}</span>
+                  <span className="per">
+                    = {formatPer100Ml(selectedVariant.price, selectedVariant.ml)}
+                  </span>
+                </>
+              )
             ) : (
               <span className="amount">Unavailable</span>
             )}

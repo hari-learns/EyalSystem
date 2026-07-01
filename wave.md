@@ -758,7 +758,67 @@ Notes:
   - `www.conyug.in`
 - `NEXT_PUBLIC_SITE_URL` is set to `https://conyug.in` for QR generation.
 
-## 17. Later Waves - Not V1
+## 17. Wave 13 - Merchant Admin UX And Email Reliability
+
+Status: **Implemented in code**. Database migration is pending manual Supabase SQL execution because local Supabase CLI lacks project privileges.
+
+Goal: make merchant admin usable for daily operations and make email delivery state explainable.
+
+Build:
+
+- Replace always-open product edit cards with a searchable, category-grouped compact list.
+- Expand one product at a time for name, description, product availability, variant rate, variant availability, and rate display mode edits.
+- Show product thumbnails from DB, but keep images platform-managed and non-editable.
+- Show save only when the expanded product has unsaved changes.
+- Warn before losing unsaved product changes on collapse, tab switch, store switch, sign out, or page unload.
+- Add optional `Rate on call` variant support in storefront, cart, checkout snapshots, admin order view, and order email templates.
+- Keep fixed-price subtotals as known subtotal when any cart line is rate-on-call.
+- Reduce orders into compact expandable rows.
+- Limit merchant status controls to `new`, `delivered`, and `cancelled`; map `delivered` to existing DB `completed`.
+- Add month filtering and monthly CSV download for the selected merchant store.
+- Show email delivery state per order.
+- Show store-level email delivery warning when `stores.merchant_order_email` is empty and fallback email is being used.
+- Fix checkout email recipient mapping so the RPC `merchantOrderEmail` value is actually used instead of always falling back.
+
+Database:
+
+- Add `public.variant_rate_display_mode` enum with `fixed` and `on_call`.
+- Add `product_variants.rate_display_mode`.
+- Add `order_items.rate_display_mode`.
+- Replace `public.create_checkout_order` so on-call lines snapshot safely with zero known line total and do not fake a final price.
+- Migration file:
+  - `supabase/migrations/20260701133000_variant_rate_display_mode.sql`
+
+Acceptance:
+
+- Existing storefront and admin reads still work before migration; code falls back to fixed-rate mode if the new column is absent.
+- `Rate on call` cannot be saved until migration is applied; API returns an explicit `409`.
+- After migration, storefront shows rate-on-call variants, checkout accepts them, and admin/email surfaces them clearly.
+- Admin products can be searched and edited without the current giant-card layout.
+- Orders can be filtered by month/status/search and exported as CSV.
+
+Verification completed:
+
+- `npm run typecheck` passed.
+- `npm run build` passed.
+- Local storefront route returned `200`.
+- Local merchant admin shell returned `200`.
+- Protected admin API smoke checks passed for:
+  - `/api/admin/me`
+  - `/api/admin/products`
+  - `/api/admin/orders`
+  - `/api/admin/orders?format=csv`
+- Product save with fixed rates returns `200` on the current live schema.
+- Product save with `Rate on call` returns the expected `409` until migration is applied.
+
+Manual verification needed:
+
+- Apply `supabase/migrations/20260701133000_variant_rate_display_mode.sql` in the Supabase SQL editor or via a privileged database connection.
+- Set `stores.merchant_order_email` for Eyal when the merchant recipient is ready.
+- Verify Resend sending domain before sending to real merchant inboxes; otherwise Resend test-mode delivery is limited and spam placement is expected.
+- After migration, mark one variant `Rate on call`, place an order, and confirm storefront/cart/admin/email all show the known subtotal plus final-rate note.
+
+## 18. Later Waves - Not V1
 
 Do not build these until Eyal and at least one more store are live:
 

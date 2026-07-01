@@ -6,12 +6,14 @@ export const runtime = "nodejs";
 type ProductPatch = {
   storeSlug?: unknown;
   productId?: unknown;
+  name?: unknown;
   description?: unknown;
   availabilityStatus?: unknown;
   variants?: {
     id?: unknown;
     priceInr?: unknown;
     availabilityStatus?: unknown;
+    rateDisplayMode?: unknown;
   }[];
 };
 
@@ -29,59 +31,56 @@ export const GET = withSupabase({ auth: "user" }, async (request, ctx) => {
     return jsonError("Store access denied.", 403);
   }
 
-  const { data, error: productsError } = await admin
+  let { data, error: productsError } = await admin
     .from("products")
-    .select(
-      `
-        id,
-        sku,
-        name,
-        short_name,
-        description,
-        availability_status,
-        is_visible,
-        display_order,
-        stores!inner (
-          slug
-        ),
-        product_variants (
-          id,
-          label,
-          unit_value,
-          price_inr,
-          availability_status,
-          is_visible,
-          display_order
-        )
-      `
-    )
+    .select(getProductSelect(true))
     .eq("stores.slug", storeSlug)
     .order("display_order", { ascending: true });
+
+  if (isMissingRateDisplayModeColumn(productsError)) {
+    const fallback = await admin
+      .from("products")
+      .select(getProductSelect(false))
+      .eq("stores.slug", storeSlug)
+      .order("display_order", { ascending: true });
+    data = fallback.data;
+    productsError = fallback.error;
+  }
 
   if (productsError) {
     return jsonError("Could not load products.", 500);
   }
 
   return Response.json({
-    products: ((data ?? []) as any[]).map((product) => ({
-      id: product.id,
-      sku: product.sku,
-      name: product.name,
-      shortName: product.short_name,
-      description: product.description,
-      availabilityStatus: product.availability_status,
-      isVisible: product.is_visible,
-      variants: [...(product.product_variants ?? [])]
-        .sort((left: any, right: any) => left.display_order - right.display_order)
-        .map((variant: any) => ({
-          id: variant.id,
-          label: variant.label,
-          unitValue: variant.unit_value,
-          priceInr: variant.price_inr,
-          availabilityStatus: variant.availability_status,
-          isVisible: variant.is_visible
-        }))
-    }))
+    products: ((data ?? []) as any[]).map((product) => {
+      const category = Array.isArray(product.categories)
+        ? product.categories[0]
+        : product.categories;
+
+      return {
+        id: product.id,
+        sku: product.sku,
+        name: product.name,
+        shortName: product.short_name,
+        description: product.description,
+        imagePath: product.image_path,
+        categorySlug: category?.slug ?? "",
+        categoryName: category?.name ?? "Uncategorized",
+        availabilityStatus: product.availability_status,
+        isVisible: product.is_visible,
+        variants: [...(product.product_variants ?? [])]
+          .sort((left: any, right: any) => left.display_order - right.display_order)
+          .map((variant: any) => ({
+            id: variant.id,
+            label: variant.label,
+            unitValue: variant.unit_value,
+            priceInr: variant.price_inr,
+            rateDisplayMode: variant.rate_display_mode ?? "fixed",
+            availabilityStatus: variant.availability_status,
+            isVisible: variant.is_visible
+          }))
+      };
+    })
   });
 });
 
@@ -125,6 +124,8 @@ export const PATCH = withSupabase({ auth: "user" }, async (request, ctx) => {
   const { error: updateError } = await admin
     .from("products")
     .update({
+      name: parsed.name,
+      short_name: parsed.name,
       description: parsed.description,
       availability_status: parsed.availabilityStatus,
       updated_at: new Date().toISOString()
@@ -136,15 +137,33 @@ export const PATCH = withSupabase({ auth: "user" }, async (request, ctx) => {
   }
 
   for (const variant of parsed.variants) {
-    const { error: variantError } = await admin
+    let { error: variantError } = await admin
       .from("product_variants")
       .update({
         price_inr: variant.priceInr,
+        rate_display_mode: variant.rateDisplayMode,
         availability_status: variant.availabilityStatus,
         updated_at: new Date().toISOString()
       })
       .eq("id", variant.id)
       .eq("product_id", parsed.productId);
+
+    if (isMissingRateDisplayModeColumn(variantError) && variant.rateDisplayMode === "fixed") {
+      const fallback = await admin
+        .from("product_variants")
+        .update({
+          price_inr: variant.priceInr,
+          availability_status: variant.availabilityStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", variant.id)
+        .eq("product_id", parsed.productId);
+      variantError = fallback.error;
+    }
+
+    if (isMissingRateDisplayModeColumn(variantError) && variant.rateDisplayMode === "on_call") {
+      return jsonError("Rate on call needs the latest database migration before it can be saved.", 409);
+    }
 
     if (variantError) {
       return jsonError("One or more variants could not be updated.", 500);
@@ -159,21 +178,32 @@ function parseProductPatch(body: ProductPatch):
       ok: true;
       storeSlug: string;
       productId: string;
+      name: string;
       description: string;
       availabilityStatus: "available" | "unavailable";
-      variants: { id: string; priceInr: number; availabilityStatus: "available" | "unavailable" }[];
+      variants: {
+        id: string;
+        priceInr: number;
+        rateDisplayMode: "fixed" | "on_call";
+        availabilityStatus: "available" | "unavailable";
+      }[];
     }
   | { ok: false; error: string } {
   const storeSlug = typeof body.storeSlug === "string" ? body.storeSlug.trim() : "";
   const productId = typeof body.productId === "string" ? body.productId.trim() : "";
+  const name = typeof body.name === "string" ? body.name.trim() : "";
   const description = typeof body.description === "string" ? body.description.trim() : "";
   const availabilityStatus =
     body.availabilityStatus === "available" || body.availabilityStatus === "unavailable"
       ? body.availabilityStatus
       : null;
 
-  if (!storeSlug || !productId || !availabilityStatus) {
+  if (!storeSlug || !productId || !name || !availabilityStatus) {
     return { ok: false, error: "Product update is incomplete." };
+  }
+
+  if (name.length > 140) {
+    return { ok: false, error: "Product name is too long." };
   }
 
   if (description.length > 600) {
@@ -187,6 +217,10 @@ function parseProductPatch(body: ProductPatch):
   const variants = body.variants.map((variant) => ({
     id: typeof variant.id === "string" ? variant.id.trim() : "",
     priceInr: Number(variant.priceInr),
+    rateDisplayMode:
+      variant.rateDisplayMode === "fixed" || variant.rateDisplayMode === "on_call"
+        ? variant.rateDisplayMode
+        : null,
     availabilityStatus:
       variant.availabilityStatus === "available" || variant.availabilityStatus === "unavailable"
         ? variant.availabilityStatus
@@ -197,6 +231,7 @@ function parseProductPatch(body: ProductPatch):
     variants.some(
       (variant) =>
         !variant.id ||
+        !variant.rateDisplayMode ||
         !variant.availabilityStatus ||
         !Number.isInteger(variant.priceInr) ||
         variant.priceInr < 0
@@ -209,12 +244,51 @@ function parseProductPatch(body: ProductPatch):
     ok: true,
     storeSlug,
     productId,
+    name,
     description,
     availabilityStatus,
     variants: variants as {
       id: string;
       priceInr: number;
+      rateDisplayMode: "fixed" | "on_call";
       availabilityStatus: "available" | "unavailable";
     }[]
   };
+}
+
+function getProductSelect(includeRateDisplayMode: boolean) {
+  return `
+    id,
+    sku,
+    name,
+    short_name,
+    description,
+    image_path,
+    availability_status,
+    is_visible,
+    display_order,
+    stores!inner (
+      slug
+    ),
+    categories!inner (
+      slug,
+      name
+    ),
+    product_variants (
+      id,
+      label,
+      unit_value,
+      price_inr,
+      ${includeRateDisplayMode ? "rate_display_mode," : ""}
+      availability_status,
+      is_visible,
+      display_order
+    )
+  `;
+}
+
+function isMissingRateDisplayModeColumn(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const message = "message" in error ? String((error as { message?: unknown }).message) : "";
+  return message.includes("rate_display_mode");
 }
